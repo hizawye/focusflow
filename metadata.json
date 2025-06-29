@@ -1,0 +1,5 @@
+{
+  "name": "FocusFlow Daily Scheduler",
+  "description": "A desktop-style daily schedule application to help you stay focused. It features a fixed 14-hour schedule, tracks the current task with a countdown timer, plays alarms when blocks change, and visualizes your completion statistics.",
+  "requestFramePermissions": []
+}
