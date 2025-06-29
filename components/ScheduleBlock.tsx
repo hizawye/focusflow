@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { ScheduleItem } from '../types.ts';
-import { Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ScheduleBlockProps {
     item: ScheduleItem;
     isActive: boolean;
     isCompleted: boolean;
-    onToggleComplete: () => void;
     onSubTaskToggle: (subIdx: number) => void;
 }
 
@@ -18,7 +17,7 @@ const ICONS: Record<string, React.ReactNode> = {
     // Add more as needed
 };
 
-export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onToggleComplete, onSubTaskToggle }) => {
+export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onSubTaskToggle }) => {
     const [expanded, setExpanded] = useState(false);
     const color = item.color || 'primary-500';
     const icon = item.icon && ICONS[item.icon] ? ICONS[item.icon] : ICONS['check'];
@@ -40,13 +39,6 @@ export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, is
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{item.start} – {item.end}</p>
                 </div>
-                <button
-                    onClick={e => { e.stopPropagation(); onToggleComplete(); }}
-                    aria-label={`Mark ${item.title} as ${isCompleted ? 'incomplete' : 'complete'}`}
-                    className={`ml-2 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 ${isCompleted ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-400'}`}
-                >
-                    {isCompleted && <Check className="w-5 h-5" />}
-                </button>
                 {subtasks.length > 0 && (
                     <button
                         className="ml-2 text-gray-400 hover:text-primary-500"
@@ -57,6 +49,7 @@ export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, is
                     </button>
                 )}
             </div>
+            {/* Only show subtasks if expanded (peek), not just because selected */}
             {expanded && subtasks.length > 0 && (
                 <div className="px-6 pb-4">
                     <ul className="space-y-2">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ScheduleItem, CompletionStatus, View } from './types.ts';
 import { DEFAULT_SCHEDULE } from './constants.ts';
 import { useSchedule } from './hooks/useSchedule.ts';
@@ -10,6 +10,7 @@ import { PieChart, Calendar, Settings, PlayCircle } from 'lucide-react';
 // We need to import recharts to make it available in the scope for StatsView
 import { Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { ScheduleEditor } from './components/ScheduleEditor.tsx';
+import { RightTaskDetails } from './components/RightTaskDetails.tsx';
 
 const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
@@ -35,6 +36,9 @@ const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatc
 
 
 export default function App() {
+    const rightPaneRef = useRef<HTMLDivElement | null>(null);
+    const scheduleEditorRef = useRef<any>(null);
+
     const [now, setNow] = useState(new Date());
     useEffect(() => {
         const interval = setInterval(() => setNow(new Date()), 10000); // update every 10s
@@ -45,7 +49,8 @@ export default function App() {
     const [isDarkMode, setIsDarkMode] = usePersistentState<boolean>('app-dark-mode', false);
     const [isAlarmEnabled, setIsAlarmEnabled] = usePersistentState<boolean>('app-alarm-enabled', true);
     
-    const [userInteracted, setUserInteracted] = useState(false);
+    // Persist userInteracted state so welcome popup only shows once
+    const [userInteracted, setUserInteracted] = usePersistentState<boolean>('app-user-interacted', false);
 
     // Replace static DAILY_BLOCKS with persistent, user-editable schedule
     // Load schedule from localStorage, or use defaultSchedule, or blank
@@ -54,15 +59,23 @@ export default function App() {
         DEFAULT_SCHEDULE
     );
 
-    // Update completion status to depend on schedule
-    const initialCompletionStatus = useMemo(() => {
-        return schedule.reduce((acc, item) => {
-            acc[item.title] = false;
-            return acc;
-        }, {} as CompletionStatus);
-    }, [schedule]);
+    // --- COMPLETION LOGIC ---
+    // A block is complete if now > block.end
+    const getBlockEndDate = (block: ScheduleItem) => {
+        const [h, m] = block.end.split(":").map(Number);
+        const d = new Date(now);
+        d.setHours(h, m, 0, 0);
+        return d;
+    };
+    const completionStatus: CompletionStatus = useMemo(() => {
+        const status: CompletionStatus = {};
+        schedule.forEach(block => {
+            status[block.title] = now > getBlockEndDate(block);
+        });
+        return status;
+    }, [schedule, now]);
 
-    const [completionStatus, setCompletionStatus] = usePersistentState<CompletionStatus>('app-completion-status', initialCompletionStatus);
+    // ---
 
     const { currentBlock, timeLeft, timeUntilNextBlock, completedBlocks } = useSchedule(schedule);
     
@@ -81,24 +94,6 @@ export default function App() {
         alarmSound?.play().catch(e => console.error("Error playing sound:", e));
       }
     }, [currentBlock?.title, isAlarmEnabled, userInteracted, alarmSound]);
-
-    useEffect(() => {
-        setCompletionStatus(prev => {
-            const newStatus = { ...prev };
-            let changed = false;
-            completedBlocks.forEach(title => {
-                if (!newStatus[title]) {
-                    newStatus[title] = true;
-                    changed = true;
-                }
-            });
-            return changed ? newStatus : prev;
-        });
-    }, [completedBlocks, setCompletionStatus]);
-    
-    const handleToggleComplete = useCallback((title: string) => {
-        setCompletionStatus(prev => ({ ...prev, [title]: !prev[title] }));
-    }, [setCompletionStatus]);
 
     const handleInteraction = () => {
         // This is the key: unlock audio playback by playing a sound in a user-initiated event.
@@ -132,9 +127,13 @@ export default function App() {
         reader.readAsText(file);
     };
 
-    // Export schedule to JSON file
+    // Export schedule to JSON file (without progress)
     const handleExport = () => {
-        const blob = new Blob([JSON.stringify(schedule, null, 2)], { type: 'application/json' });
+        const exportData = schedule.map(({subtasks, ...rest}) => ({
+            ...rest,
+            ...(subtasks ? {subtasks: subtasks.map(({title, ...s}) => ({title, ...s, completed: undefined}))} : {})
+        }));
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -165,6 +164,35 @@ export default function App() {
         });
     };
 
+    // --- Sort schedule by start time for display ---
+    const sortedSchedule = useMemo(() => {
+        return [...schedule].sort((a, b) => {
+            const [ah, am] = a.start.split(":").map(Number);
+            const [bh, bm] = b.start.split(":").map(Number);
+            return ah !== bh ? ah - bh : am - bm;
+        });
+    }, [schedule]);
+
+    // --- Task selection for right details pane ---
+    const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
+    const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
+    // Clear selection when leaving schedule view
+    useEffect(() => {
+        if (view !== 'schedule' && selectedTaskIdx !== null) setSelectedTaskIdx(null);
+    }, [view, selectedTaskIdx]);
+    // Simple select/deselect logic: allow empty selection
+    const handleSelectTask = (idx: number) => {
+        setSelectedTaskIdx(selectedTaskIdx === idx ? null : idx);
+    };
+
+    // On desktop, scroll right pane to top when a task is selected
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.innerWidth >= 768 && selectedTaskIdx !== null && rightPaneRef.current) {
+            const rect = rightPaneRef.current.getBoundingClientRect();
+            window.scrollTo({ top: window.scrollY + rect.top - 24, behavior: 'smooth' }); // 24px offset for header
+        }
+    }, [selectedTaskIdx]);
+
     const renderView = () => {
         switch (view) {
             case 'stats':
@@ -183,11 +211,6 @@ export default function App() {
             default:
                 return (
                     <div className="relative">
-                        <TimerDisplay 
-                            timeLeft={timeLeft} 
-                            taskName={currentBlock?.title || null} 
-                            timeUntilNextBlock={timeUntilNextBlock}
-                        />
                         <div className="flex relative">
                             {/* Timeline bar */}
                             <div className="w-6 flex flex-col items-center relative">
@@ -211,12 +234,14 @@ export default function App() {
                             {/* Schedule blocks */}
                             <div className="flex-1">
                                 <ScheduleEditor 
-                                    schedule={schedule} 
+                                    ref={scheduleEditorRef}
+                                    schedule={sortedSchedule} 
                                     setSchedule={setSchedule} 
                                     completionStatus={completionStatus}
                                     currentBlock={currentBlock}
-                                    onToggleComplete={handleToggleComplete}
                                     onSubTaskToggle={handleSubTaskToggle}
+                                    onSelectTask={handleSelectTask}
+                                    selectedTaskIdx={selectedTaskIdx}
                                 />
                             </div>
                         </div>
@@ -270,9 +295,9 @@ export default function App() {
         </button>
     )
 
+    // --- Layout Skeleton ---
     return (
         <div className="min-h-screen font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
-            
             {!userInteracted && (
                 <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity duration-300">
                     <div className="text-center bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl max-w-sm mx-4">
@@ -291,24 +316,83 @@ export default function App() {
                 </div>
             )}
 
-            <div className={`max-w-2xl mx-auto p-4 sm:p-6 lg:p-8 transition-filter duration-300 ${!userInteracted ? 'blur-md pointer-events-none' : ''}`}>
-                <header className="text-center mb-8">
-                    <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white">FocusFlow</h1>
-                    <p className="text-md text-gray-600 dark:text-gray-400">Your daily command center</p>
+            {/* Responsive layout: sidebar (desktop), header, main, right pane */}
+            <div className={`w-full max-w-7xl mx-auto transition-filter duration-300 ${!userInteracted ? 'blur-md pointer-events-none' : ''}`}>
+                <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center gap-4">
+                    <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white flex-1">FocusFlow</h1>
+                    <span className="hidden md:inline text-md text-gray-600 dark:text-gray-400">Your daily command center</span>
                 </header>
-                
-                <main className="mb-8">
-                   {renderView()}
-                </main>
-
-                <footer className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700">
+                <div className="flex flex-col md:flex-row min-h-[calc(100vh-4rem)]">
+                    {/* Sidebar nav (desktop) */}
+                    <nav className="hidden md:flex flex-col w-20 bg-white/90 dark:bg-gray-900/90 border-r border-gray-200 dark:border-gray-800 py-6 items-center gap-4 relative">
+                        <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
+                        <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon />
+                        <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
+                        {/* Add task button below tabs */}
+                        <button
+                            className="mt-8 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg w-12 h-12 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-primary-300"
+                            onClick={handleSidebarAdd}
+                            aria-label="Add Block"
+                            title="Add Block"
+                            style={{ position: 'absolute', bottom: '2rem', left: '50%', transform: 'translateX(-50%)' }}
+                        >
+                            <span className="sr-only">Add Task</span>
+                            +
+                        </button>
+                    </nav>
+                    {/* Main content: make scrollable */}
+                    <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)]">
+                        {renderView()}
+                    </main>
+                    {/* Right details pane (desktop) */}
+                    <aside
+                        ref={rightPaneRef}
+                        tabIndex={-1}
+                        className="hidden md:flex flex-col w-80 bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
+                    >
+                        {/* Move TimerDisplay here */}
+                        <div className="mb-6">
+                            <TimerDisplay 
+                                timeLeft={timeLeft} 
+                                taskName={currentBlock?.title || null} 
+                                timeUntilNextBlock={timeUntilNextBlock}
+                            />
+                        </div>
+                        {selectedTask ? (
+                            <RightTaskDetails
+                                task={selectedTask}
+                                onEdit={() => {/* TODO: implement edit logic */}}
+                                onDelete={() => {
+                                    setSchedule(prev => prev.filter((_, i) => i !== selectedTaskIdx));
+                                    setSelectedTaskIdx(null);
+                                }}
+                                onUpdate={(updated: ScheduleItem) => {
+                                    setSchedule(prev => {
+                                        const idx = prev.findIndex(t => t.title === selectedTask.title && t.start === selectedTask.start);
+                                        if (idx === -1) return prev;
+                                        const copy = [...prev];
+                                        copy[idx] = updated;
+                                        return copy;
+                                    });
+                                }}
+                                onClose={() => setSelectedTaskIdx(null)}
+                            />
+                        ) : (
+                            <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
+                                <span className="text-lg">Select a task to see details</span>
+                            </div>
+                        )}
+                    </aside>
+                </div>
+                {/* Bottom nav (mobile) */}
+                <footer className="fixed md:hidden bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 z-40">
                     <nav className="max-w-2xl mx-auto flex justify-around p-2">
-                       <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
-                       <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon />
-                       <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
+                        <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
+                        <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon />
+                        <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
                     </nav>
                 </footer>
-                 <div className="h-24"></div> {/* Spacer for fixed footer */}
+                <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
             </div>
         </div>
     );

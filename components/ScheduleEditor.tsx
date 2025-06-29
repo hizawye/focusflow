@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import React, { useState, useRef, useEffect } from 'react';
 import { ScheduleItem } from '../types.ts';
 import { ScheduleBlock } from './ScheduleBlock.tsx';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
@@ -10,8 +9,10 @@ interface ScheduleEditorProps {
     setSchedule: (schedule: ScheduleItem[]) => void;
     completionStatus: { [key: string]: boolean };
     currentBlock: ScheduleItem | null;
-    onToggleComplete: (title: string) => void;
     onSubTaskToggle: (blockIdx: number, subIdx: number) => void;
+    onSelectTask?: (idx: number) => void;
+    selectedTaskIdx?: number | null;
+    onAddTask?: () => void; // new prop
 }
 
 const emptyBlock: ScheduleItem = { title: '', start: '', end: '' };
@@ -35,8 +36,10 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     setSchedule,
     completionStatus,
     currentBlock,
-    onToggleComplete,
     onSubTaskToggle,
+    onSelectTask,
+    selectedTaskIdx,
+    onAddTask,
 }) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [form, setForm] = useState<ScheduleItem>(emptyBlock);
@@ -47,6 +50,16 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     const [subtaskInput, setSubtaskInput] = useState('');
     const [subtasks, setSubtasks] = useState(form.subtasks || []);
 
+    const addFormRef = useRef<HTMLFormElement | null>(null);
+    const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+    // Scroll to selected block on desktop when selectedTaskIdx changes
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.innerWidth >= 768 && selectedTaskIdx !== null && blockRefs.current[selectedTaskIdx]) {
+            blockRefs.current[selectedTaskIdx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [selectedTaskIdx]);
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
@@ -55,6 +68,11 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
         setForm(emptyBlock);
         setEditingIndex(null);
         setAdding(true);
+        if (onAddTask) onAddTask(); // notify parent if needed
+        setTimeout(() => {
+            addFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            addFormRef.current?.querySelector('input[name="title"]')?.focus();
+        }, 50);
     };
 
     const handleEdit = (idx: number) => {
@@ -118,139 +136,34 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
       setForm({ ...form, color });
     };
 
-    // Drag-and-drop handler
-    const onDragEnd = (result: DropResult) => {
-        if (!result.destination) return;
-        const reordered = Array.from(schedule);
-        const [removed] = reordered.splice(result.source.index, 1);
-        reordered.splice(result.destination.index, 0, removed);
-        setSchedule(reordered);
-    };
-
     return (
-        <DragDropContext onDragEnd={onDragEnd}>
-            <Droppable droppableId="schedule-list">
-                {(provided) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-3">
-                        {schedule.length === 0 && (
-                            <div className="text-center text-gray-400 py-8">
-                                <Plus className="mx-auto mb-2 w-10 h-10 text-primary-400" />
-                                <div className="text-lg">No blocks yet. Click the <span className='inline-block align-middle'><Plus className='inline w-5 h-5' /></span> button to add your first block!</div>
-                            </div>
-                        )}
-                        {schedule.map((item, idx) => (
-                            <Draggable key={item.title + item.start} draggableId={item.title + item.start} index={idx}>
-                                {(provided, snapshot) => (
-                                    <div
-                                        ref={provided.innerRef}
-                                        {...provided.draggableProps}
-                                        {...provided.dragHandleProps}
-                                        className={`relative group ${snapshot.isDragging ? 'ring-2 ring-primary-400' : ''}`}
-                                    >
-                                        {editingIndex === idx ? (
-                                            <form onSubmit={handleFormSubmit} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in">
-                                                <input
-                                                    name="title"
-                                                    value={form.title}
-                                                    onChange={handleInputChange}
-                                                    placeholder="Title"
-                                                    className="w-full p-2 rounded border focus:ring-2 focus:ring-primary-400"
-                                                    autoFocus
-                                                />
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        type="time"
-                                                        name="start"
-                                                        value={form.start}
-                                                        onChange={handleInputChange}
-                                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400"
-                                                    />
-                                                    <input
-                                                        type="time"
-                                                        name="end"
-                                                        value={form.end}
-                                                        onChange={handleInputChange}
-                                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400"
-                                                    />
-                                                </div>
-                                                <div className="flex gap-2 items-center mt-2">
-                                                    <label className="text-sm">Icon:</label>
-                                                    <select value={form.icon || ''} onChange={handleIconChange} className="rounded border p-1">
-                                                        <option value="">None</option>
-                                                        {ICON_OPTIONS.map(opt => (
-                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                        ))}
-                                                    </select>
-                                                    <label className="text-sm ml-4">Color:</label>
-                                                    <div className="flex gap-1">
-                                                        {COLOR_OPTIONS.map(opt => (
-                                                            <button type="button" key={opt.value} className={`w-6 h-6 rounded-full border-2 ${form.color === opt.value ? 'border-black' : 'border-transparent'} ${opt.className}`} onClick={() => handleColorChange(opt.value)} aria-label={opt.label}></button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                <div className="mt-2">
-                                                    <label className="text-sm font-medium">Sub-tasks:</label>
-                                                    <div className="flex gap-2 mt-1">
-                                                        <input
-                                                            type="text"
-                                                            value={subtaskInput}
-                                                            onChange={e => setSubtaskInput(e.target.value)}
-                                                            placeholder="Add sub-task"
-                                                            className="flex-1 p-2 rounded border"
-                                                        />
-                                                        <button type="button" onClick={handleSubtaskAdd} className="bg-primary-500 text-white px-3 py-1 rounded">Add</button>
-                                                    </div>
-                                                    <ul className="mt-2 space-y-1">
-                                                        {subtasks.map((sub, i) => (
-                                                            <li key={sub.id} className="flex items-center gap-2">
-                                                                <input type="checkbox" checked={sub.completed} onChange={() => handleSubtaskToggle(i)} />
-                                                                <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
-                                                                <button type="button" onClick={() => handleSubtaskRemove(i)} className="text-xs text-red-500 ml-2">Remove</button>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                                <div className="flex gap-2 mt-2">
-                                                    <button type="submit" className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Save</button>
-                                                    <button type="button" className="flex-1 bg-gray-300 px-4 py-2 rounded" onClick={handleCancel}>Cancel</button>
-                                                </div>
-                                            </form>
-                                        ) : (
-                                            <>
-                                                <ScheduleBlock
-                                                    item={item}
-                                                    isActive={currentBlock?.title === item.title}
-                                                    isCompleted={completionStatus[item.title] || false}
-                                                    onToggleComplete={() => onToggleComplete(item.title)}
-                                                    onSubTaskToggle={subIdx => onSubTaskToggle(idx, subIdx)}
-                                                />
-                                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 flex items-center gap-1"
-                                                        onClick={() => handleEdit(idx)}
-                                                        title="Edit"
-                                                    ><Edit2 className="w-4 h-4" /> Edit</button>
-                                                    <button
-                                                        className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 flex items-center gap-1"
-                                                        onClick={() => handleDelete(idx)}
-                                                        title="Delete"
-                                                    ><Trash2 className="w-4 h-4" /> Delete</button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </Draggable>
-                        ))}
-                        {provided.placeholder}
-                        {adding && (
-                            <form onSubmit={handleFormSubmit} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in">
+        <div className="space-y-3">
+            {schedule.length === 0 && (
+                <div className="text-center text-gray-400 py-8">
+                    <Plus className="mx-auto mb-2 w-10 h-10 text-primary-400" />
+                    <div className="text-lg">No blocks yet. Click the <span className='inline-block align-middle'><Plus className='inline w-5 h-5' /></span> button to add your first block!</div>
+                </div>
+            )}
+            {schedule.map((item, idx) => {
+                // Only allow inline editing on mobile (md:hidden)
+                const isEditing = editingIndex === idx && typeof window !== 'undefined' && window.innerWidth < 768;
+                return (
+                    <div
+                        key={item.title + item.start}
+                        ref={el => blockRefs.current[idx] = el}
+                        className={`relative group ${selectedTaskIdx === idx ? 'ring-2 ring-primary-500 ring-offset-2 z-10 bg-primary-50 dark:bg-primary-900/30' : ''}`}
+                        onClick={() => onSelectTask && editingIndex === null && !adding ? onSelectTask(idx) : undefined}
+                        tabIndex={0}
+                        aria-selected={selectedTaskIdx === idx}
+                    >
+                        {isEditing ? (
+                            <form onSubmit={handleFormSubmit} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in md:hidden">
                                 <input
                                     name="title"
                                     value={form.title}
                                     onChange={handleInputChange}
                                     placeholder="Title"
-                                    className="w-full p-2 rounded border focus:ring-2 focus:ring-primary-400"
+                                    className="w-full p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
                                     autoFocus
                                 />
                                 <div className="flex gap-2">
@@ -259,19 +172,19 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                                         name="start"
                                         value={form.start}
                                         onChange={handleInputChange}
-                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400"
+                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
                                     />
                                     <input
                                         type="time"
                                         name="end"
                                         value={form.end}
                                         onChange={handleInputChange}
-                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400"
+                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
                                     />
                                 </div>
                                 <div className="flex gap-2 items-center mt-2">
                                     <label className="text-sm">Icon:</label>
-                                    <select value={form.icon || ''} onChange={handleIconChange} className="rounded border p-1">
+                                    <select value={form.icon || ''} onChange={handleIconChange} className="rounded border p-1 text-gray-900 dark:text-white bg-white dark:bg-gray-800">
                                         <option value="">None</option>
                                         {ICON_OPTIONS.map(opt => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -292,9 +205,9 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                                             value={subtaskInput}
                                             onChange={e => setSubtaskInput(e.target.value)}
                                             placeholder="Add sub-task"
-                                            className="flex-1 p-2 rounded border"
+                                            className="flex-1 p-2 rounded border text-gray-900 dark:text-white bg-white dark:bg-gray-800"
                                         />
-                                        <button type="button" onClick={handleSubtaskAdd} className="bg-primary-500 text-white px-3 py-1 rounded">Add</button>
+                                        <button type="button" onClick={handleSubtaskAdd} className="bg-primary-500 text-white px-3 py-1 rounded hover:bg-primary-600">Add</button>
                                     </div>
                                     <ul className="mt-2 space-y-1">
                                         {subtasks.map((sub, i) => (
@@ -307,21 +220,113 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                                     </ul>
                                 </div>
                                 <div className="flex gap-2 mt-2">
-                                    <button type="submit" className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Add</button>
-                                    <button type="button" className="flex-1 bg-gray-300 px-4 py-2 rounded" onClick={handleCancel}>Cancel</button>
+                                    <button type="submit" className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Save</button>
+                                    <button type="button" className="flex-1 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded" onClick={handleCancel}>Cancel</button>
                                 </div>
                             </form>
+                        ) : (
+                            <>
+                                <ScheduleBlock
+                                    item={item}
+                                    isActive={currentBlock?.title === item.title}
+                                    isCompleted={completionStatus[item.title] || false}
+                                    onSubTaskToggle={subIdx => onSubTaskToggle(idx, subIdx)}
+                                />
+                                {/* Hide edit/delete on desktop, show only on mobile */}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity md:hidden">
+                                    <button
+                                        className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 flex items-center gap-1"
+                                        onClick={e => { e.stopPropagation(); handleEdit(idx); }}
+                                        title="Edit"
+                                    ><Edit2 className="w-4 h-4" /> Edit</button>
+                                    <button
+                                        className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 flex items-center gap-1"
+                                        onClick={e => { e.stopPropagation(); handleDelete(idx); }}
+                                        title="Delete"
+                                    ><Trash2 className="w-4 h-4" /> Delete</button>
+                                </div>
+                            </>
                         )}
                     </div>
-                )}
-            </Droppable>
+                );
+            })}
+            {adding && (
+                <form ref={addFormRef} onSubmit={handleFormSubmit} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in">
+                    <input
+                        name="title"
+                        value={form.title}
+                        onChange={handleInputChange}
+                        placeholder="Title"
+                        className="w-full p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                        autoFocus
+                    />
+                    <div className="flex gap-2">
+                        <input
+                            type="time"
+                            name="start"
+                            value={form.start}
+                            onChange={handleInputChange}
+                            className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                        />
+                        <input
+                            type="time"
+                            name="end"
+                            value={form.end}
+                            onChange={handleInputChange}
+                            className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                        />
+                    </div>
+                    <div className="flex gap-2 items-center mt-2">
+                        <label className="text-sm">Icon:</label>
+                        <select value={form.icon || ''} onChange={handleIconChange} className="rounded border p-1 text-gray-900 dark:text-white bg-white dark:bg-gray-800">
+                            <option value="">None</option>
+                            {ICON_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </select>
+                        <label className="text-sm ml-4">Color:</label>
+                        <div className="flex gap-1">
+                            {COLOR_OPTIONS.map(opt => (
+                                <button type="button" key={opt.value} className={`w-6 h-6 rounded-full border-2 ${form.color === opt.value ? 'border-black' : 'border-transparent'} ${opt.className}`} onClick={() => handleColorChange(opt.value)} aria-label={opt.label}></button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <label className="text-sm font-medium">Sub-tasks:</label>
+                        <div className="flex gap-2 mt-1">
+                            <input
+                                type="text"
+                                value={subtaskInput}
+                                onChange={e => setSubtaskInput(e.target.value)}
+                                placeholder="Add sub-task"
+                                className="flex-1 p-2 rounded border text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                            />
+                            <button type="button" onClick={handleSubtaskAdd} className="bg-primary-500 text-white px-3 py-1 rounded hover:bg-primary-600">Add</button>
+                        </div>
+                        <ul className="mt-2 space-y-1">
+                            {subtasks.map((sub, i) => (
+                                <li key={sub.id} className="flex items-center gap-2">
+                                    <input type="checkbox" checked={sub.completed} onChange={() => handleSubtaskToggle(i)} />
+                                    <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
+                                    <button type="button" onClick={() => handleSubtaskRemove(i)} className="text-xs text-red-500 ml-2">Remove</button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                        <button type="submit" className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Add</button>
+                        <button type="button" className="flex-1 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded" onClick={handleCancel}>Cancel</button>
+                    </div>
+                </form>
+            )}
+            {/* Only show add button on mobile */}
             <button
-                className="fixed bottom-24 right-8 z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-primary-300"
+                className="fixed bottom-20 right-4 left-auto md:hidden z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-primary-300"
                 onClick={handleAdd}
                 disabled={adding || editingIndex !== null}
                 aria-label="Add Block"
                 title="Add Block"
-            >
+                style={{maxWidth: '100vw'}}>
                 <Plus className="w-8 h-8" />
             </button>
             {deleteIndex !== null && (
@@ -332,12 +337,12 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                         <div className="text-gray-500 mb-4">This action cannot be undone.</div>
                         <div className="flex gap-2 justify-center">
                             <button onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">Delete</button>
-                            <button onClick={cancelDelete} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                            <button onClick={cancelDelete} className="bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded">Cancel</button>
                         </div>
                     </div>
                 </div>
             )}
-        </DragDropContext>
+        </div>
     );
 };
 
