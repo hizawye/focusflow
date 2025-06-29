@@ -1,45 +1,79 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScheduleItem } from '../types.ts';
+import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ScheduleBlockProps {
     item: ScheduleItem;
     isActive: boolean;
     isCompleted: boolean;
     onToggleComplete: () => void;
+    onSubTaskToggle: (subIdx: number) => void;
 }
 
-const CheckIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.052-.143z" clipRule="evenodd" />
-    </svg>
-);
+const ICONS: Record<string, React.ReactNode> = {
+    brain: <span role="img" aria-label="Deep Work">🧠</span>,
+    coffee: <span role="img" aria-label="Break">☕</span>,
+    book: <span role="img" aria-label="Study">📚</span>,
+    check: <span role="img" aria-label="General">✅</span>,
+    // Add more as needed
+};
 
-
-export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onToggleComplete }) => {
-    const baseClasses = "flex items-center p-4 rounded-lg shadow-sm transition-all duration-300";
-    const statusClasses = isActive
-        ? 'bg-primary-500 text-white shadow-lg ring-2 ring-primary-300'
-        : isCompleted
-        ? 'bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-        : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700';
+export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onToggleComplete, onSubTaskToggle }) => {
+    const [expanded, setExpanded] = useState(false);
+    const color = item.color || 'primary-500';
+    const icon = item.icon && ICONS[item.icon] ? ICONS[item.icon] : ICONS['check'];
+    const subtasks = item.subtasks || [];
+    const completedCount = subtasks.filter(t => t.completed).length;
+    const progress = subtasks.length > 0 ? `${completedCount}/${subtasks.length}` : null;
 
     return (
-        <div className={`${baseClasses} ${statusClasses}`}>
-            <div className="flex-grow">
-                <h3 className={`font-bold text-lg ${isCompleted ? 'line-through' : ''}`}>{item.title}</h3>
-                <p className={`text-sm ${isActive ? 'text-primary-100' : 'text-gray-500 dark:text-gray-400'}`}>
-                    {item.start} – {item.end}
-                </p>
+        <div className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 ${isActive ? 'ring-2 ring-primary-400 bg-primary-50 dark:bg-primary-900/30' : 'bg-white dark:bg-gray-800'}`}>
+            <div className="flex items-center p-4 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+                <div className={`mr-3 text-2xl`}>
+                    {icon}
+                </div>
+                <div className="flex-grow">
+                    <div className="flex items-center gap-2">
+                        <h3 className={`font-bold text-lg ${isCompleted ? 'line-through' : ''}`}>{item.title}</h3>
+                        {progress && <span className="text-xs bg-gray-200 dark:bg-gray-700 rounded px-2 py-0.5 font-semibold">{progress}</span>}
+                        {isActive && <span className="ml-2 text-xs bg-primary-600 text-white rounded px-2 py-0.5">Now</span>}
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{item.start} – {item.end}</p>
+                </div>
+                <button
+                    onClick={e => { e.stopPropagation(); onToggleComplete(); }}
+                    aria-label={`Mark ${item.title} as ${isCompleted ? 'incomplete' : 'complete'}`}
+                    className={`ml-2 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 ${isCompleted ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-400'}`}
+                >
+                    {isCompleted && <Check className="w-5 h-5" />}
+                </button>
+                {subtasks.length > 0 && (
+                    <button
+                        className="ml-2 text-gray-400 hover:text-primary-500"
+                        aria-label={expanded ? 'Collapse' : 'Expand'}
+                        onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+                    >
+                        {expanded ? <ChevronUp /> : <ChevronDown />}
+                    </button>
+                )}
             </div>
-            <button
-                onClick={onToggleComplete}
-                aria-label={`Mark ${item.title} as ${isCompleted ? 'incomplete' : 'complete'}`}
-                className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-primary-500 ${
-                    isCompleted ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-400'
-                }`}
-            >
-                {isCompleted && <CheckIcon />}
-            </button>
+            {expanded && subtasks.length > 0 && (
+                <div className="px-6 pb-4">
+                    <ul className="space-y-2">
+                        {subtasks.map((sub, subIdx) => (
+                            <li key={sub.id} className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    checked={sub.completed}
+                                    onChange={() => onSubTaskToggle(subIdx)}
+                                    className="accent-primary-500 w-4 h-4 rounded"
+                                />
+                                <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
         </div>
     );
 };

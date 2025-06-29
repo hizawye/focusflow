@@ -3,12 +3,16 @@
 A customizable daily schedule and productivity app. Stay focused, track your tasks, and visualize your progress with a beautiful, modern interface.
 
 ## Features
-- Customizable daily schedule (add, edit, delete time blocks)
-- Persistent storage in your browser (localStorage)
-- Import/export your schedule as JSON
+- Fully customizable daily schedule (add, edit, delete, and reorder time blocks)
+- Sub-tasks, icons, and color selection for each block
+- Expandable/collapsible blocks with progress tracking
+- Live timeline and "You are here" marker
+- Persistent storage in your browser (localStorage, private by default)
+- Import/export your schedule as JSON (in the schedule editor)
 - Start with a blank schedule or a default template
 - Visual stats and completion tracking
 - Dark mode and alarm options
+- Modern, responsive UI/UX
 
 ## Getting Started
 
@@ -24,9 +28,10 @@ npm run dev
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## Usage
-- **Add/Edit/Delete Blocks:** Use the schedule view to manage your time blocks. Time pickers make setup easy.
-- **Import/Export:** Use the buttons to back up or restore your schedule as a JSON file.
-- **Start Blank:** Click 'Start Blank' to clear your schedule and begin fresh.
+- **Add/Edit/Delete/Reorder Blocks:** Use the schedule view and editor to manage your time blocks. Customize with sub-tasks, icons, and colors. Drag-and-drop reordering coming soon.
+- **Expandable Blocks:** Click a block to expand and view sub-tasks, progress, and details.
+- **Live Timeline:** See a real-time indicator of your current position in the day.
+- **Import/Export/Start Blank:** Use the schedule editor to back up, restore, or clear your schedule as a JSON file.
 - **Stats:** View your completion stats in the Stats tab.
 - **Settings:** Toggle dark mode and alarms.
 

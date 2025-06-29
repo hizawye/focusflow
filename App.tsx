@@ -35,6 +35,12 @@ const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatc
 
 
 export default function App() {
+    const [now, setNow] = useState(new Date());
+    useEffect(() => {
+        const interval = setInterval(() => setNow(new Date()), 10000); // update every 10s
+        return () => clearInterval(interval);
+    }, []);
+
     const [view, setView] = usePersistentState<View>('app-view', 'schedule');
     const [isDarkMode, setIsDarkMode] = usePersistentState<boolean>('app-dark-mode', false);
     const [isAlarmEnabled, setIsAlarmEnabled] = usePersistentState<boolean>('app-alarm-enabled', true);
@@ -144,6 +150,21 @@ export default function App() {
         }
     };
 
+    // Handler to toggle subtask completion
+    const handleSubTaskToggle = (blockIdx: number, subIdx: number) => {
+        setSchedule(prev => {
+            const updated = prev.map((block, i) => {
+                if (i !== blockIdx) return block;
+                if (!block.subtasks) return block;
+                const newSubtasks = block.subtasks.map((sub, j) =>
+                    j === subIdx ? { ...sub, completed: !sub.completed } : sub
+                );
+                return { ...block, subtasks: newSubtasks };
+            });
+            return updated;
+        });
+    };
+
     const renderView = () => {
         switch (view) {
             case 'stats':
@@ -154,44 +175,97 @@ export default function App() {
                     onToggleDarkMode={setIsDarkMode}
                     isAlarmEnabled={isAlarmEnabled}
                     onToggleAlarm={setIsAlarmEnabled}
+                    onImportSchedule={handleImport}
+                    onExportSchedule={handleExport}
+                    onClearSchedule={handleStartBlank}
                 />;
             case 'schedule':
             default:
                 return (
-                    <div>
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={handleExport} className="bg-primary-600 text-white px-3 py-1 rounded">Export</button>
-                            <label className="bg-primary-600 text-white px-3 py-1 rounded cursor-pointer">
-                                Import
-                                <input type="file" accept="application/json" onChange={handleImport} className="hidden" />
-                            </label>
-                            <button onClick={handleStartBlank} className="bg-gray-400 text-white px-3 py-1 rounded">Start Blank</button>
-                        </div>
+                    <div className="relative">
                         <TimerDisplay 
                             timeLeft={timeLeft} 
                             taskName={currentBlock?.title || null} 
                             timeUntilNextBlock={timeUntilNextBlock}
                         />
-                        <ScheduleEditor 
-                            schedule={schedule} 
-                            setSchedule={setSchedule} 
-                            completionStatus={completionStatus}
-                            currentBlock={currentBlock}
-                            onToggleComplete={handleToggleComplete}
-                        />
+                        <div className="flex relative">
+                            {/* Timeline bar */}
+                            <div className="w-6 flex flex-col items-center relative">
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-full w-1 bg-primary-200 dark:bg-primary-800 rounded-full z-0" style={{height: '100%'}}></div>
+                                {/* You are here marker */}
+                                {schedule.length > 0 && (() => {
+                                    const first = schedule[0];
+                                    const last = schedule[schedule.length - 1];
+                                    const parse = (t: string) => { const [h, m] = t.split(':').map(Number); const d = new Date(); d.setHours(h, m, 0, 0); return d; };
+                                    const start = parse(first.start).getTime();
+                                    const end = parse(last.end).getTime();
+                                    const pct = Math.min(1, Math.max(0, (now.getTime() - start) / (end - start)));
+                                    return (
+                                        <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{top: `calc(${pct * 100}% - 10px)`}}>
+                                            <div className="w-5 h-5 bg-primary-500 rounded-full border-4 border-white dark:border-gray-900 shadow-lg animate-pulse"></div>
+                                            <div className="text-xs text-primary-600 mt-1 text-center">You are here</div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                            {/* Schedule blocks */}
+                            <div className="flex-1">
+                                <ScheduleEditor 
+                                    schedule={schedule} 
+                                    setSchedule={setSchedule} 
+                                    completionStatus={completionStatus}
+                                    currentBlock={currentBlock}
+                                    onToggleComplete={handleToggleComplete}
+                                    onSubTaskToggle={handleSubTaskToggle}
+                                />
+                            </div>
+                        </div>
                     </div>
                 );
         }
     };
     
-    const NavItem = ({ icon: Icon, label, activeView, targetView }: {icon: React.ElementType, label: string, activeView: View, targetView: View}) => (
+    // Calculate completion percentage for dynamic stats icon
+    const totalBlocks = schedule.length;
+    const completedCount = Object.values(completionStatus).filter(Boolean).length;
+    const percentComplete = totalBlocks > 0 ? completedCount / totalBlocks : 0;
+
+    // Dynamic Stats Icon
+    const DynamicStatsIcon = () => (
+        <span className="relative inline-block">
+            <PieChart className="w-6 h-6 mb-1" />
+            <svg className="absolute top-0 left-0 w-6 h-6" viewBox="0 0 24 24">
+                <circle
+                    cx="12" cy="12" r="10"
+                    fill="none"
+                    stroke="#e5e7eb"
+                    strokeWidth="3"
+                />
+                <circle
+                    cx="12" cy="12" r="10"
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="3"
+                    strokeDasharray={2 * Math.PI * 10}
+                    strokeDashoffset={(1 - percentComplete) * 2 * Math.PI * 10}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 0.5s' }}
+                />
+            </svg>
+            {percentComplete === 1 && (
+                <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] rounded-full px-1">✔</span>
+            )}
+        </span>
+    );
+
+    const NavItem = ({ icon: Icon, label, activeView, targetView, dynamicIcon }: {icon: React.ElementType, label: string, activeView: View, targetView: View, dynamicIcon?: boolean}) => (
         <button
             onClick={() => setView(targetView)}
             className={`flex flex-col items-center justify-center w-full py-2 px-1 rounded-md transition-colors duration-200 ${
                 activeView === targetView ? 'bg-primary-500 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
         >
-            <Icon className="w-6 h-6 mb-1" />
+            {dynamicIcon ? <DynamicStatsIcon /> : <Icon className="w-6 h-6 mb-1" />}
             <span className="text-xs font-medium">{label}</span>
         </button>
     )
@@ -230,7 +304,7 @@ export default function App() {
                 <footer className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700">
                     <nav className="max-w-2xl mx-auto flex justify-around p-2">
                        <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
-                       <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" />
+                       <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon />
                        <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
                     </nav>
                 </footer>
