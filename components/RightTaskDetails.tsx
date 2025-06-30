@@ -6,9 +6,10 @@ interface RightTaskDetailsProps {
   onDelete: () => void;
   onUpdate: (updated: ScheduleItem) => void;
   onClose: () => void;
+  hideClose?: boolean; // Add hideClose prop
 }
 
-export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDelete, onUpdate, onClose }) => {
+export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDelete, onUpdate, onClose, hideClose }) => {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<ScheduleItem>(task);
   const [note, setNote] = useState(''); // Placeholder for notes, could be part of ScheduleItem
@@ -88,7 +89,10 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDele
           <span className="text-xl font-bold">{form.title}</span>
         )}
         {form.icon && ICONS[form.icon] && <span className="ml-2 text-2xl">{ICONS[form.icon]}</span>}
-        <button onClick={onClose} className="ml-auto text-gray-400 hover:text-primary-500 text-xl" title="Close">×</button>
+        {/* Only show close button if hideClose is not true */}
+        {!hideClose && (
+          <button onClick={onClose} className="ml-auto text-gray-400 hover:text-primary-500 text-xl" title="Close">×</button>
+        )}
       </div>
       <div className="flex gap-2 mb-2">
         {editing ? (

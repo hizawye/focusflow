@@ -298,22 +298,51 @@ export default function App() {
     };
 
     // --- Layout Skeleton ---
+    // Mobile modal state
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    useEffect(() => {
+        // Prevent background scroll when modal is open
+        if (isMobile && selectedTask) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+    }, [isMobile, selectedTask]);
+
     return (
         <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
-            {!userInteracted && (
-                <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity duration-300">
-                    <div className="text-center bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl max-w-sm mx-4">
-                        <PlayCircle className="mx-auto h-16 w-16 text-primary-500 mb-4" />
-                        <h2 className="text-2xl font-bold mb-2 text-gray-800 dark:text-white">Welcome to FocusFlow</h2>
-                        <p className="mb-6 text-gray-600 dark:text-gray-300">
-                            Click to start your session. This will enable audio alerts for task changes.
-                        </p>
-                        <button 
-                            onClick={handleInteraction}
-                            className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-primary-300"
+            {/* Mobile Task Details Modal */}
+            {isMobile && selectedTask && (
+                <div className="fixed inset-0 z-50 flex items-end md:hidden">
+                    {/* Overlay */}
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedTaskIdx(null)}></div>
+                    {/* Modal */}
+                    <div className="relative w-full max-w-none h-[65vh] bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl px-4 pt-4 pb-8 flex flex-col overflow-y-auto animate-slideUp z-10" style={{minWidth:0}}>
+                        {/* Drag handle */}
+                        <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-3 mt-1"></div>
+                        <button
+                            className="absolute top-3 right-4 text-2xl text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 bg-gray-200 dark:bg-gray-700 rounded-full w-10 h-10 flex items-center justify-center z-20"
+                            onClick={() => setSelectedTaskIdx(null)}
+                            aria-label="Close details"
                         >
-                            Start Session
+                            ×
                         </button>
+                        <div className="mt-4 mb-2 w-full" style={{minWidth:0}}>
+                            <RightTaskDetails
+                                task={selectedTask}
+                                onDelete={() => {
+                                    setSchedule(schedule => schedule.filter((_, i) => i !== selectedTaskIdx));
+                                    setSelectedTaskIdx(null);
+                                }}
+                                onUpdate={updated => {
+                                    setSchedule(schedule => schedule.map((t, i) => i === selectedTaskIdx ? updated : t));
+                                }}
+                                onClose={() => setSelectedTaskIdx(null)}
+                                mobile
+                                hideClose // Prevent duplicate X button in mobile modal
+                            />
+                        </div>
                     </div>
                 </div>
             )}
@@ -347,7 +376,7 @@ export default function App() {
                     <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0">
                         {renderView()}
                     </main>
-                    {/* Right details pane (desktop) */}
+                    {/* Right details pane (desktop only) */}
                     <aside
                         ref={rightPaneRef}
                         tabIndex={-1}
