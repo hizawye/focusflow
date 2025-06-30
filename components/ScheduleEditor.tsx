@@ -3,6 +3,7 @@ import { ScheduleItem } from '../types.ts';
 import { ScheduleBlock } from './ScheduleBlock.tsx';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { generateScheduleWithGemini } from '../gemini';
 
 interface ScheduleEditorProps {
     schedule: ScheduleItem[];
@@ -31,7 +32,7 @@ const COLOR_OPTIONS = [
   { value: 'primary-500', label: 'Default', className: 'bg-primary-500' },
 ];
 
-export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
+export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({ 
     schedule,
     setSchedule,
     completionStatus,
@@ -49,6 +50,10 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
     // Add subtask management state
     const [subtaskInput, setSubtaskInput] = useState('');
     const [subtasks, setSubtasks] = useState(form.subtasks || []);
+    // Gemini integration
+    const [loadingGemini, setLoadingGemini] = useState(false);
+    const [showGeminiInput, setShowGeminiInput] = useState(false);
+    const [geminiPrompt, setGeminiPrompt] = useState('');
 
     const addFormRef = useRef<HTMLFormElement | null>(null);
     const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -134,6 +139,22 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
     };
     const handleColorChange = (color: string) => {
       setForm({ ...form, color });
+    };
+
+    const handleGeminiGenerate = async () => {
+        if (!geminiPrompt.trim()) return;
+        setLoadingGemini(true);
+        const prompt = `${geminiPrompt}\n\nReply with a JSON array of schedule blocks, each with: title, start, end, and notes. Example:\n[\n  {"title": "Wake up + Prep", "start": "07:00", "end": "07:30", "notes": "Light breakfast, music"},\n  {"title": "Trading (Live / Analysis)", "start": "07:30", "end": "11:30", "notes": "Focused session"}\n]`;
+        try {
+            const newSchedule = await generateScheduleWithGemini(prompt);
+            setSchedule(newSchedule);
+            setShowGeminiInput(false);
+            setGeminiPrompt('');
+        } catch (e: any) {
+            alert('Gemini error: ' + (e.message || e));
+        } finally {
+            setLoadingGemini(false);
+        }
     };
 
     useImperativeHandle(ref, () => ({

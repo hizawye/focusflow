@@ -8,6 +8,7 @@ import { SettingsView } from './components/SettingsView.tsx';
 import { PieChart, Calendar, Settings, PlayCircle } from 'lucide-react';
 import { ScheduleEditor } from './components/ScheduleEditor.tsx';
 import { RightTaskDetails } from './components/RightTaskDetails.tsx';
+import { generateScheduleWithGemini } from './gemini';
 
 const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
@@ -58,9 +59,14 @@ export default function App() {
     // --- COMPLETION LOGIC ---
     // A block is complete if now > block.end
     const getBlockEndDate = (block: ScheduleItem) => {
-        const [h, m] = block.end.split(":").map(Number);
+        let [h, m] = block.end.split(":").map(Number);
         const d = new Date(now);
-        d.setHours(h, m, 0, 0);
+        if (h === 0 && m === 0) {
+            // Treat 00:00 as end of day (23:59:59)
+            d.setHours(23, 59, 59, 999);
+        } else {
+            d.setHours(h, m, 0, 0);
+        }
         return d;
     };
     const completionStatus: CompletionStatus = useMemo(() => {
@@ -310,6 +316,64 @@ export default function App() {
         return () => { document.body.style.overflow = ''; };
     }, [isMobile, selectedTask]);
 
+    // Gemini AI message input state
+    const [aiMessage, setAiMessage] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [showGeminiInput, setShowGeminiInput] = useState(false);
+
+    // Helper to apply Gemini actions to the current schedule
+    function applyGeminiActions(schedule: ScheduleItem[], actions: any[]): ScheduleItem[] {
+      let updated = [...schedule];
+      for (const action of actions) {
+        if (action.action === 'add' && action.item) {
+          updated.push(action.item);
+        } else if (action.action === 'edit' && action.target && action.item) {
+          updated = updated.map(item => item.title === action.target ? { ...item, ...action.item } : item);
+        } else if (action.action === 'remove' && action.target) {
+          updated = updated.filter(item => item.title !== action.target);
+        }
+      }
+      return updated;
+    }
+
+    // Handler for Gemini AI message submit
+    async function handleGeminiMessageSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        if (!aiMessage.trim()) return;
+        setAiLoading(true);
+        // Send current schedule and ask for actions
+        const prompt = `My current schedule is:\n${JSON.stringify(schedule, null, 2)}\n\nUser request: ${aiMessage}\n\nReply ONLY with a JSON array of actions to add, edit, or remove schedule blocks. Each action should be one of:\n- { \"action\": \"add\", \"item\": { ... } }\n- { \"action\": \"edit\", \"target\": \"title\", \"item\": { ... } }\n- { \"action\": \"remove\", \"target\": \"title\" }\n\nExample:\n[\n  { \"action\": \"add\", \"item\": { \"title\": \"Trading\", \"start\": \"21:00\", \"end\": \"22:00\", \"notes\": \"Trading time\" } }\n]`;
+        try {
+            const actions = await generateScheduleWithGemini(prompt);
+            setSchedule(prev => applyGeminiActions(prev, actions));
+            setAiMessage('');
+        } catch (e: any) {
+            alert('Gemini error: ' + (e.message || e));
+        } finally {
+            setAiLoading(false);
+        }
+    }
+
+    // Reset manualStatus for all schedule items at 12:01 AM
+    useEffect(() => {
+        const now = new Date();
+        // Set reset time to 12:01 AM
+        const resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0, 0);
+        const msUntilReset = resetTime.getTime() - now.getTime();
+        const resetManualStatus = () => {
+            setSchedule(prev => prev.map(item => {
+                const { manualStatus, ...rest } = item;
+                return rest;
+            }));
+        };
+        const timeout = setTimeout(() => {
+            resetManualStatus();
+            // Set interval for future days (24h)
+            setInterval(resetManualStatus, 24 * 60 * 60 * 1000);
+        }, msUntilReset);
+        return () => clearTimeout(timeout);
+    }, [setSchedule]);
+
     return (
         <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
             {/* Mobile Task Details Modal */}
@@ -348,7 +412,7 @@ export default function App() {
             )}
 
             {/* Responsive layout: sidebar (desktop), header, main, right pane */}
-            <div className={`w-full max-w-7xl mx-auto transition-filter duration-300 ${!userInteracted ? 'blur-md pointer-events-none' : ''} h-full flex flex-col`} style={{height: '100vh'}}>
+            <div className={`w-full max-w-7xl mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: '100vh'}}>
                 <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center gap-4">
                     <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white flex-1">FocusFlow</h1>
                     <span className="hidden md:inline text-md text-gray-600 dark:text-gray-400">Your daily command center</span>
@@ -416,6 +480,46 @@ export default function App() {
                                 <span className="text-lg">click a task to see details</span>
                             </div>
                         )}
+                        {/* Gemini Generate Button above the input */}
+                        {!showGeminiInput && (
+                            <button
+                                className="w-full max-w-full mx-auto mb-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg font-semibold hover:from-blue-600 hover:to-green-600 transition focus:outline-none focus:ring-4 focus:ring-blue-300 z-30"
+                                onClick={() => setShowGeminiInput(true)}
+                                aria-label="Generate with Gemini"
+                                type="button"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                Generate with Gemini
+                            </button>
+                        )}
+                        {/* Gemini AI message input at the bottom with improved UI */}
+                        <form onSubmit={handleGeminiMessageSubmit} className="w-full p-3 bg-gradient-to-r from-blue-50 to-green-50 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-800 flex gap-2 z-20 shadow-xl rounded-b-lg">
+                            <input
+                                type="text"
+                                className="flex-1 rounded-full border px-4 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-400 shadow-sm"
+                                placeholder="Ask Gemini to add, edit, or remove tasks... (e.g. 'Add Trading 21:00-00:00')"
+                                value={aiMessage}
+                                onChange={e => setAiMessage(e.target.value)}
+                                disabled={aiLoading}
+                                autoComplete="off"
+                            />
+                            <button
+                                type="submit"
+                                className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-5 py-2 rounded-full shadow hover:from-blue-600 hover:to-green-600 transition disabled:opacity-50 font-semibold text-base"
+                                disabled={aiLoading || !aiMessage.trim()}
+                            >
+                                {aiLoading ? (
+                                  <span className="animate-spin mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                  </svg>
+                                )}
+                                <span>{aiLoading ? 'Sending...' : 'Send'}</span>
+                            </button>
+                        </form>
                     </aside>
                 </div>
                 {/* Bottom nav (mobile) */}
