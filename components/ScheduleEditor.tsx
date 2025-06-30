@@ -238,19 +238,15 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
                                     isCompleted={completionStatus[item.title] || false}
                                     onSubTaskToggle={subIdx => onSubTaskToggle(idx, subIdx)}
                                 />
-                                {/* Desktop-only edit button */}
-                                <div className="absolute top-2 right-2 hidden md:flex gap-1">
-                                    <button
-                                        className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 flex items-center gap-1"
-                                        onClick={e => { e.stopPropagation(); if (onSelectTask) onSelectTask(idx); }}
-                                        title="Edit"
-                                    ><Edit2 className="w-4 h-4" /> Edit</button>
-                                </div>
                                 {/* Hide edit/delete on desktop, show only on mobile */}
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity md:hidden">
                                     <button
                                         className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 flex items-center gap-1"
-                                        onClick={e => { e.stopPropagation(); handleEdit(idx); }}
+                                        onClick={e => { 
+                                            e.stopPropagation(); 
+                                            console.log('Mobile Edit button clicked', { idx, item });
+                                            handleEdit(idx); 
+                                        }}
                                         title="Edit"
                                     ><Edit2 className="w-4 h-4" /> Edit</button>
                                     <button

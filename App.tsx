@@ -172,11 +172,21 @@ export default function App() {
         });
     }, [schedule]);
 
+    // --- Add selected task state ---
+    const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
+    const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
+
     // --- Right pane stats ---
     const totalTasks = schedule.length;
     const completedTasks = Object.values(completionStatus).filter(Boolean).length;
     const notCompletedTasks = totalTasks - completedTasks;
-    const totalMinutes = getTotalScheduledMinutes(schedule);
+    const totalMinutes = schedule.reduce((total, block) => {
+        const [startH, startM] = block.start.split(':').map(Number);
+        const [endH, endM] = block.end.split(':').map(Number);
+        const start = startH * 60 + startM;
+        const end = endH * 60 + endM;
+        return total + Math.max(0, end - start);
+    }, 0);
 
     const renderView = () => {
         switch (view) {
@@ -225,9 +235,8 @@ export default function App() {
                                     completionStatus={completionStatus}
                                     currentBlock={currentBlock}
                                     onSubTaskToggle={handleSubTaskToggle}
-                                    // Remove selection props
-                                    // onSelectTask={handleSelectTask}
-                                    // selectedTaskIdx={selectedTaskIdx}
+                                    onSelectTask={setSelectedTaskIdx}
+                                    selectedTaskIdx={selectedTaskIdx}
                                 />
                             </div>
                         </div>
@@ -360,10 +369,24 @@ export default function App() {
                                 timeUntilNextBlock={timeUntilNextBlock}
                             />
                         </div>
-                        {/* Removed selectedTask logic, always show empty state or timer */}
-                        <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
-                            <span className="text-lg">Select a task to see details</span>
-                        </div>
+                        {/* Show details if a task is selected, else show placeholder */}
+                        {selectedTask ? (
+                            <RightTaskDetails
+                                task={selectedTask}
+                                onDelete={() => {
+                                    setSchedule(schedule => schedule.filter((_, i) => i !== selectedTaskIdx));
+                                    setSelectedTaskIdx(null);
+                                }}
+                                onUpdate={updated => {
+                                    setSchedule(schedule => schedule.map((t, i) => i === selectedTaskIdx ? updated : t));
+                                }}
+                                onClose={() => setSelectedTaskIdx(null)}
+                            />
+                        ) : (
+                            <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
+                                <span className="text-lg">click a task to see details</span>
+                            </div>
+                        )}
                     </aside>
                 </div>
                 {/* Bottom nav (mobile) */}
@@ -378,14 +401,4 @@ export default function App() {
             </div>
         </div>
     );
-}
-
-function getTotalScheduledMinutes(schedule: ScheduleItem[]): number {
-    return schedule.reduce((total, block) => {
-        const [startH, startM] = block.start.split(':').map(Number);
-        const [endH, endM] = block.end.split(':').map(Number);
-        const start = startH * 60 + startM;
-        const end = endH * 60 + endM;
-        return total + Math.max(0, end - start);
-    }, 0);
 }
