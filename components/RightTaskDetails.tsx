@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScheduleItem, SubTask } from '../types';
 
 interface RightTaskDetailsProps {
   task: ScheduleItem;
-  onEdit: () => void;
   onDelete: () => void;
   onUpdate: (updated: ScheduleItem) => void;
   onClose: () => void;
 }
 
-export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onEdit, onDelete, onUpdate, onClose }) => {
+export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDelete, onUpdate, onClose }) => {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<ScheduleItem>(task);
   const [note, setNote] = useState(''); // Placeholder for notes, could be part of ScheduleItem
+
+  // Sync form state with task prop when task changes
+  useEffect(() => {
+    setForm(task);
+  }, [task]);
 
   // Handle field changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -51,6 +55,15 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onEdit
     setForm(task);
     setEditing(false);
   };
+
+  // Helper: is task finished?
+  const isFinished = (() => {
+    if (!form.end) return false;
+    const [h, m] = form.end.split(":").map(Number);
+    const endDate = new Date();
+    endDate.setHours(h, m, 0, 0);
+    return new Date() > endDate;
+  })();
 
   return (
     <div>
@@ -101,7 +114,7 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onEdit
             <input
               type="color"
               name="color"
-              value={form.color || '#3b82f6'}
+              value={/^#([0-9A-Fa-f]{6})$/.test(form.color || '') ? form.color : '#3b82f6'}
               onChange={handleChange}
               className="w-8 h-8 p-0 border-none bg-transparent"
             />
@@ -169,18 +182,49 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onEdit
         )}
       </div>
       {/* Edit/Delete controls */}
-      <div className="flex gap-2 mt-4">
-        {editing ? (
-          <>
-            <button onClick={handleSave} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Save</button>
-            <button onClick={handleCancel} className="flex-1 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded">Cancel</button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => setEditing(true)} className="flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Edit</button>
-            <button onClick={onDelete} className="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Delete</button>
-          </>
+      <div className="flex flex-col gap-2 mt-4">
+        {/* Manual status controls */}
+        {!editing && (
+          <div className="mb-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-gray-400">Mark as:</span>
+              <button
+                className={`px-3 py-1 rounded text-xs font-semibold transition-colors duration-150 border border-gray-600/20 focus:outline-none focus:ring-2 focus:ring-green-400 ${form.manualStatus === 'done' ? 'bg-green-500 text-white' : 'bg-gray-800 text-green-300 hover:bg-green-600/20'}`}
+                onClick={() => { setForm({ ...form, manualStatus: 'done' }); onUpdate({ ...form, manualStatus: 'done' }); }}
+                disabled={!isFinished}
+              >Done</button>
+              <button
+                className={`px-3 py-1 rounded text-xs font-semibold transition-colors duration-150 border-2 border-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 ${form.manualStatus === 'missed' ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-800 text-red-400 hover:bg-red-600/20'}`}
+                onClick={() => { setForm({ ...form, manualStatus: 'missed' }); onUpdate({ ...form, manualStatus: 'missed' }); }}
+                disabled={!isFinished}
+              > Missed</button>
+              <button
+                className="px-3 py-1 rounded text-xs font-semibold bg-gray-700 text-gray-300 border border-gray-600/20 hover:bg-gray-600/80 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                onClick={() => { setForm({ ...form, manualStatus: undefined }); onUpdate({ ...form, manualStatus: undefined }); }}
+                disabled={!form.manualStatus || !isFinished}
+              >Clear</button>
+            </div>
+            {form.manualStatus && (
+              <span className={`block mt-1 text-xs font-bold flex items-center gap-1 ${form.manualStatus === 'done' ? 'text-green-400' : 'text-red-500'}`}>{form.manualStatus === 'done' ? '✔ Marked as: Done' : <><svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" className="inline mr-1"><circle cx="10" cy="10" r="10"/></svg>Marked as: Missed</>}</span>
+            )}
+            {!isFinished && (
+              <span className="block mt-1 text-xs text-yellow-400">You can mark status after the task ends.</span>
+            )}
+          </div>
         )}
+        <div className="flex gap-2 w-full">
+          {editing ? (
+            <>
+              <button onClick={handleSave} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Save</button>
+              <button onClick={handleCancel} className="flex-1 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded">Cancel</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setEditing(true)} className="flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Edit</button>
+              <button onClick={onDelete} className="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Delete</button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

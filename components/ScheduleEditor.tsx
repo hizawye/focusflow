@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { ScheduleItem } from '../types.ts';
 import { ScheduleBlock } from './ScheduleBlock.tsx';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
@@ -31,7 +31,7 @@ const COLOR_OPTIONS = [
   { value: 'primary-500', label: 'Default', className: 'bg-primary-500' },
 ];
 
-export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
+export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
     schedule,
     setSchedule,
     completionStatus,
@@ -40,7 +40,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     onSelectTask,
     selectedTaskIdx,
     onAddTask,
-}) => {
+}, ref) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [form, setForm] = useState<ScheduleItem>(emptyBlock);
     const [adding, setAdding] = useState(false);
@@ -136,6 +136,10 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
       setForm({ ...form, color });
     };
 
+    useImperativeHandle(ref, () => ({
+        handleAdd
+    }));
+
     return (
         <div className="space-y-3">
             {schedule.length === 0 && (
@@ -155,6 +159,8 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                         onClick={() => onSelectTask && editingIndex === null && !adding ? onSelectTask(idx) : undefined}
                         tabIndex={0}
                         aria-selected={selectedTaskIdx === idx}
+                        role="button"
+                        aria-label={`Open details for ${item.title}`}
                     >
                         {isEditing ? (
                             <form onSubmit={handleFormSubmit} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in md:hidden">
@@ -212,7 +218,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                                     <ul className="mt-2 space-y-1">
                                         {subtasks.map((sub, i) => (
                                             <li key={sub.id} className="flex items-center gap-2">
-                                                <input type="checkbox" checked={sub.completed} onChange={() => handleSubtaskToggle(i)} />
+                                                <input type="checkbox" checked={sub.completed} onChange={e => { e.stopPropagation(); handleSubtaskToggle(i); }} />
                                                 <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
                                                 <button type="button" onClick={() => handleSubtaskRemove(i)} className="text-xs text-red-500 ml-2">Remove</button>
                                             </li>
@@ -232,6 +238,14 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                                     isCompleted={completionStatus[item.title] || false}
                                     onSubTaskToggle={subIdx => onSubTaskToggle(idx, subIdx)}
                                 />
+                                {/* Desktop-only edit button */}
+                                <div className="absolute top-2 right-2 hidden md:flex gap-1">
+                                    <button
+                                        className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 flex items-center gap-1"
+                                        onClick={e => { e.stopPropagation(); if (onSelectTask) onSelectTask(idx); }}
+                                        title="Edit"
+                                    ><Edit2 className="w-4 h-4" /> Edit</button>
+                                </div>
                                 {/* Hide edit/delete on desktop, show only on mobile */}
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity md:hidden">
                                     <button
@@ -306,7 +320,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                         <ul className="mt-2 space-y-1">
                             {subtasks.map((sub, i) => (
                                 <li key={sub.id} className="flex items-center gap-2">
-                                    <input type="checkbox" checked={sub.completed} onChange={() => handleSubtaskToggle(i)} />
+                                    <input type="checkbox" checked={sub.completed} onChange={e => { e.stopPropagation(); handleSubtaskToggle(i); }} />
                                     <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
                                     <button type="button" onClick={() => handleSubtaskRemove(i)} className="text-xs text-red-500 ml-2">Remove</button>
                                 </li>
@@ -344,6 +358,6 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
             )}
         </div>
     );
-};
+});
 
 export default ScheduleEditor;

@@ -26,7 +26,10 @@ export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, is
     const progress = subtasks.length > 0 ? `${completedCount}/${subtasks.length}` : null;
 
     return (
-        <div className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 ${isActive ? 'ring-2 ring-primary-400 bg-primary-50 dark:bg-primary-900/30' : 'bg-white dark:bg-gray-800'}`}>
+        <div className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 \
+            ${isActive ? 'ring-2 ring-primary-400 bg-primary-50 dark:bg-primary-900/30' : ''} \
+            ${isCompleted ? 'bg-gray-200 dark:bg-gray-800 opacity-60 grayscale text-gray-400' : 'bg-white dark:bg-gray-800'}`}
+        >
             <div className="flex items-center p-4 cursor-pointer" onClick={() => setExpanded(e => !e)}>
                 <div className={`mr-3 text-2xl`}>
                     {icon}
@@ -58,7 +61,7 @@ export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, is
                                 <input
                                     type="checkbox"
                                     checked={sub.completed}
-                                    onChange={() => onSubTaskToggle(subIdx)}
+                                    onChange={e => { e.stopPropagation(); onSubTaskToggle(subIdx); }}
                                     className="accent-primary-500 w-4 h-4 rounded"
                                 />
                                 <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>

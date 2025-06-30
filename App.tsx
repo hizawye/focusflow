@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ScheduleItem, CompletionStatus, View } from './types.ts';
 import { DEFAULT_SCHEDULE } from './constants.ts';
 import { useSchedule } from './hooks/useSchedule.ts';
-import { ScheduleBlock } from './components/ScheduleBlock.tsx';
 import { TimerDisplay } from './components/TimerDisplay.tsx';
 import { StatsView } from './components/StatsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
 import { PieChart, Calendar, Settings, PlayCircle } from 'lucide-react';
-// We need to import recharts to make it available in the scope for StatsView
-import { Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { ScheduleEditor } from './components/ScheduleEditor.tsx';
 import { RightTaskDetails } from './components/RightTaskDetails.tsx';
 
@@ -33,7 +30,6 @@ const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatc
 
     return [state, setState];
 };
-
 
 export default function App() {
     const rightPaneRef = useRef<HTMLDivElement | null>(null);
@@ -70,7 +66,10 @@ export default function App() {
     const completionStatus: CompletionStatus = useMemo(() => {
         const status: CompletionStatus = {};
         schedule.forEach(block => {
-            status[block.title] = now > getBlockEndDate(block);
+            // Use manualStatus if set, otherwise fallback to time-based
+            if (block.manualStatus === 'done') status[block.title] = true;
+            else if (block.manualStatus === 'missed') status[block.title] = false;
+            else status[block.title] = now > getBlockEndDate(block);
         });
         return status;
     }, [schedule, now]);
@@ -131,7 +130,7 @@ export default function App() {
     const handleExport = () => {
         const exportData = schedule.map(({subtasks, ...rest}) => ({
             ...rest,
-            ...(subtasks ? {subtasks: subtasks.map(({title, ...s}) => ({title, ...s, completed: undefined}))} : {})
+            ...(subtasks ? {subtasks: subtasks.map(({completed, ...s}) => ({...s}))} : {})
         }));
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -173,25 +172,11 @@ export default function App() {
         });
     }, [schedule]);
 
-    // --- Task selection for right details pane ---
-    const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
-    const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
-    // Clear selection when leaving schedule view
-    useEffect(() => {
-        if (view !== 'schedule' && selectedTaskIdx !== null) setSelectedTaskIdx(null);
-    }, [view, selectedTaskIdx]);
-    // Simple select/deselect logic: allow empty selection
-    const handleSelectTask = (idx: number) => {
-        setSelectedTaskIdx(selectedTaskIdx === idx ? null : idx);
-    };
-
-    // On desktop, scroll right pane to top when a task is selected
-    useEffect(() => {
-        if (typeof window !== 'undefined' && window.innerWidth >= 768 && selectedTaskIdx !== null && rightPaneRef.current) {
-            const rect = rightPaneRef.current.getBoundingClientRect();
-            window.scrollTo({ top: window.scrollY + rect.top - 24, behavior: 'smooth' }); // 24px offset for header
-        }
-    }, [selectedTaskIdx]);
+    // --- Right pane stats ---
+    const totalTasks = schedule.length;
+    const completedTasks = Object.values(completionStatus).filter(Boolean).length;
+    const notCompletedTasks = totalTasks - completedTasks;
+    const totalMinutes = getTotalScheduledMinutes(schedule);
 
     const renderView = () => {
         switch (view) {
@@ -240,8 +225,9 @@ export default function App() {
                                     completionStatus={completionStatus}
                                     currentBlock={currentBlock}
                                     onSubTaskToggle={handleSubTaskToggle}
-                                    onSelectTask={handleSelectTask}
-                                    selectedTaskIdx={selectedTaskIdx}
+                                    // Remove selection props
+                                    // onSelectTask={handleSelectTask}
+                                    // selectedTaskIdx={selectedTaskIdx}
                                 />
                             </div>
                         </div>
@@ -295,9 +281,16 @@ export default function App() {
         </button>
     )
 
+    // Add handler to trigger add form in ScheduleEditor
+    const handleSidebarAdd = () => {
+        if (scheduleEditorRef.current && typeof scheduleEditorRef.current.handleAdd === 'function') {
+            scheduleEditorRef.current.handleAdd();
+        }
+    };
+
     // --- Layout Skeleton ---
     return (
-        <div className="min-h-screen font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
+        <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
             {!userInteracted && (
                 <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity duration-300">
                     <div className="text-center bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl max-w-sm mx-4">
@@ -317,16 +310,17 @@ export default function App() {
             )}
 
             {/* Responsive layout: sidebar (desktop), header, main, right pane */}
-            <div className={`w-full max-w-7xl mx-auto transition-filter duration-300 ${!userInteracted ? 'blur-md pointer-events-none' : ''}`}>
+            <div className={`w-full max-w-7xl mx-auto transition-filter duration-300 ${!userInteracted ? 'blur-md pointer-events-none' : ''} h-full flex flex-col`} style={{height: '100vh'}}>
                 <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center gap-4">
                     <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white flex-1">FocusFlow</h1>
                     <span className="hidden md:inline text-md text-gray-600 dark:text-gray-400">Your daily command center</span>
                 </header>
-                <div className="flex flex-col md:flex-row min-h-[calc(100vh-4rem)]">
+                <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
                     {/* Sidebar nav (desktop) */}
                     <nav className="hidden md:flex flex-col w-20 bg-white/90 dark:bg-gray-900/90 border-r border-gray-200 dark:border-gray-800 py-6 items-center gap-4 relative">
                         <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
-                        <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon />
+                        {/* Hide Stats tab on desktop */}
+                        {/* <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon /> */}
                         <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
                         {/* Add task button below tabs */}
                         <button
@@ -340,8 +334,8 @@ export default function App() {
                             +
                         </button>
                     </nav>
-                    {/* Main content: make scrollable */}
-                    <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)]">
+                    {/* Main content: make scrollable, fill available height */}
+                    <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0">
                         {renderView()}
                     </main>
                     {/* Right details pane (desktop) */}
@@ -350,6 +344,14 @@ export default function App() {
                         tabIndex={-1}
                         className="hidden md:flex flex-col w-80 bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
                     >
+                        {/* Stats summary */}
+                        <div className="mb-4 p-3 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-100 dark:border-primary-800 text-sm">
+                            <div className="font-bold mb-1">Today's Stats</div>
+                            <div>Total scheduled: <span className="font-semibold">{Math.floor(totalMinutes/60)}h {totalMinutes%60}m</span></div>
+                            <div>Tasks: <span className="font-semibold">{totalTasks}</span></div>
+                            <div>Completed: <span className="font-semibold text-green-600">{completedTasks}</span></div>
+                            <div>Not completed: <span className="font-semibold text-red-600">{notCompletedTasks}</span></div>
+                        </div>
                         {/* Move TimerDisplay here */}
                         <div className="mb-6">
                             <TimerDisplay 
@@ -358,30 +360,10 @@ export default function App() {
                                 timeUntilNextBlock={timeUntilNextBlock}
                             />
                         </div>
-                        {selectedTask ? (
-                            <RightTaskDetails
-                                task={selectedTask}
-                                onEdit={() => {/* TODO: implement edit logic */}}
-                                onDelete={() => {
-                                    setSchedule(prev => prev.filter((_, i) => i !== selectedTaskIdx));
-                                    setSelectedTaskIdx(null);
-                                }}
-                                onUpdate={(updated: ScheduleItem) => {
-                                    setSchedule(prev => {
-                                        const idx = prev.findIndex(t => t.title === selectedTask.title && t.start === selectedTask.start);
-                                        if (idx === -1) return prev;
-                                        const copy = [...prev];
-                                        copy[idx] = updated;
-                                        return copy;
-                                    });
-                                }}
-                                onClose={() => setSelectedTaskIdx(null)}
-                            />
-                        ) : (
-                            <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
-                                <span className="text-lg">Select a task to see details</span>
-                            </div>
-                        )}
+                        {/* Removed selectedTask logic, always show empty state or timer */}
+                        <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
+                            <span className="text-lg">Select a task to see details</span>
+                        </div>
                     </aside>
                 </div>
                 {/* Bottom nav (mobile) */}
@@ -396,4 +378,14 @@ export default function App() {
             </div>
         </div>
     );
+}
+
+function getTotalScheduledMinutes(schedule: ScheduleItem[]): number {
+    return schedule.reduce((total, block) => {
+        const [startH, startM] = block.start.split(':').map(Number);
+        const [endH, endM] = block.end.split(':').map(Number);
+        const start = startH * 60 + startM;
+        const end = endH * 60 + endM;
+        return total + Math.max(0, end - start);
+    }, 0);
 }

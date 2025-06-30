@@ -11,6 +11,7 @@ export interface ScheduleItem {
   subtasks?: SubTask[];
   icon?: string; // e.g. 'brain', 'coffee', etc.
   color?: string; // e.g. 'blue', 'green', etc.
+  manualStatus?: 'done' | 'missed'; // User can manually mark as done/missed
 }
 
 export interface CompletionStatus {
