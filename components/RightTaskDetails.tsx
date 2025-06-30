@@ -13,6 +13,14 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDele
   const [form, setForm] = useState<ScheduleItem>(task);
   const [note, setNote] = useState(''); // Placeholder for notes, could be part of ScheduleItem
 
+  // ICONS for emoji rendering
+  const ICONS: Record<string, React.ReactNode> = {
+    brain: <span role="img" aria-label="Deep Work">🧠</span>,
+    coffee: <span role="img" aria-label="Break">☕</span>,
+    book: <span role="img" aria-label="Study">📚</span>,
+    check: <span role="img" aria-label="General">✅</span>,
+  };
+
   // Sync form state with task prop when task changes
   useEffect(() => {
     setForm(task);
@@ -79,7 +87,7 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDele
         ) : (
           <span className="text-xl font-bold">{form.title}</span>
         )}
-        {form.icon && <span className="ml-2 text-2xl">{form.icon}</span>}
+        {form.icon && ICONS[form.icon] && <span className="ml-2 text-2xl">{ICONS[form.icon]}</span>}
         <button onClick={onClose} className="ml-auto text-gray-400 hover:text-primary-500 text-xl" title="Close">×</button>
       </div>
       <div className="flex gap-2 mb-2">
