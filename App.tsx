@@ -12,6 +12,8 @@ import { MobileTaskModal } from './components/MobileTaskModal';
 import { MobileFooter } from './components/MobileFooter';
 import { AddTaskButton } from './components/AddTaskButton';
 import { ScheduleEditor } from './components/ScheduleEditor';
+import { SettingsView } from './components/SettingsView';
+import { StatsView } from './components/StatsView';
 
 const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
