@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { TaskDetailsPanel } from './TaskDetailsPanel';
 import { TaskAddButton } from './TaskAddButton';
 
@@ -22,10 +22,26 @@ export function TaskDetailsSidebar({
   handleDeleteTask,
   handleUpdateTask
 }: any) {
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setSelectedTaskIdx(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [setSelectedTaskIdx]);
+
   return (
     <aside
+      ref={sidebarRef}
       tabIndex={-1}
-      className="md:flex flex-col w-[28rem] min-w-[28rem] max-w-[28rem] bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
+      className="hidden md:flex flex-col w-[28rem] min-w-[28rem] max-w-[28rem] bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
       style={{ paddingBottom: '140px' }}
     >
       {/* Stats summary */}
