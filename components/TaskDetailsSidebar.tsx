@@ -1,9 +1,9 @@
 import React from 'react';
-import { RightTaskDetails } from './RightTaskDetails';
-import { AddTaskButton } from './AddTaskButton';
+import { TaskDetailsPanel } from './TaskDetailsPanel';
+import { TaskAddButton } from './TaskAddButton';
 
 // RightAside: The right details pane for desktop view
-export function RightAside({
+export function TaskDetailsSidebar({
   totalMinutes,
   totalTasks,
   completedTasks,
@@ -18,7 +18,9 @@ export function RightAside({
   aiMessage,
   setAiMessage,
   aiLoading,
-  handleGeminiMessageSubmit
+  handleGeminiMessageSubmit,
+  handleDeleteTask,
+  handleUpdateTask
 }: any) {
   return (
     <aside
@@ -36,16 +38,12 @@ export function RightAside({
       </div>
       {/* Task details or placeholder */}
       {selectedTask ? (
-        <RightTaskDetails
-          task={selectedTask}
-          onDelete={() => {
-            setSchedule((schedule: any) => schedule.filter((_: any, i: number) => i !== selectedTaskIdx));
-            setSelectedTaskIdx(null);
-          }}
-          onUpdate={(updated: any) => {
-            setSchedule((schedule: any) => schedule.map((t: any, i: number) => i === selectedTaskIdx ? updated : t));
-          }}
-          onClose={() => setSelectedTaskIdx(null)}
+        <TaskDetailsPanel
+            task={selectedTask}
+            onDelete={() => handleDeleteTask(selectedTask.title)}
+            onUpdate={handleUpdateTask}
+            onClose={() => setSelectedTaskIdx(null)}
+            hideClose={true}
         />
       ) : (
         <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
@@ -57,7 +55,7 @@ export function RightAside({
         style={{ boxShadow: "0 -2px 16px 0 rgba(0,0,0,0.04)" }}>
         {/* Add Task and Gemini button row */}
         <div className="flex flex-row gap-2 w-full mb-2">
-          <AddTaskButton onClick={handleSidebarAdd} variant="inline" />
+          <TaskAddButton onClick={handleSidebarAdd} variant="inline" />
           {!showGeminiInput && (
             <button
               className="flex-1 max-w-full bg-gradient-to-r from-blue-500 to-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg font-semibold hover:from-blue-600 hover:to-green-600 transition focus:outline-none focus:ring-4 focus:ring-blue-300 z-30"

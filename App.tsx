@@ -6,14 +6,14 @@ import { generateScheduleWithGemini } from './gemini';
 
 import { Header } from './components/Header';
 import { PieChart } from 'lucide-react';
-import { SidebarNav } from './components/SidebarNav';
-import { RightAside } from './components/RightAside';
-import { MobileTaskModal } from './components/MobileTaskModal';
-import { MobileFooter } from './components/MobileFooter';
-import { AddTaskButton } from './components/AddTaskButton';
-import { ScheduleEditor } from './components/ScheduleEditor';
-import { SettingsView } from './components/SettingsView';
-import { StatsView } from './components/StatsView';
+import { DesktopNavBar } from './components/DesktopNavBar';
+import { TaskDetailsSidebar } from './components/TaskDetailsSidebar';
+import { TaskModal } from './components/TaskModal';
+import { MobileNavBar } from './components/MobileNavBar';
+import { TaskAddButton } from './components/TaskAddButton';
+import { ScheduleList } from './components/ScheduleList';
+import { SettingsPage } from './components/SettingsPage';
+import { StatsPage } from './components/StatsPage';
 
 const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
@@ -147,6 +147,15 @@ export default function App() {
         });
     };
 
+    const handleDeleteTask = (title: string) => {
+        setSchedule(prev => prev.filter(task => task.title !== title));
+        setSelectedTaskIdx(null);
+    };
+
+    const handleUpdateTask = (updatedTask: ScheduleItem) => {
+        setSchedule(prev => prev.map(task => task.title === updatedTask.title ? updatedTask : task));
+    };
+
     // --- Sort schedule by start time for display ---
     const sortedSchedule = useMemo(() => {
         return [...schedule].sort((a, b) => {
@@ -175,9 +184,9 @@ export default function App() {
     const renderView = () => {
         switch (view) {
             case 'stats':
-                return <StatsView schedule={schedule} completionStatus={completionStatus} />;
+                return <StatsPage schedule={schedule} completionStatus={completionStatus} />;
             case 'settings':
-                return <SettingsView 
+                return <SettingsPage 
                     isDarkMode={isDarkMode} 
                     onToggleDarkMode={setIsDarkMode}
                     isAlarmEnabled={isAlarmEnabled}
@@ -212,7 +221,7 @@ export default function App() {
                             </div>
                             {/* Schedule blocks */}
                             <div className="flex-1">
-                                <ScheduleEditor 
+                                <ScheduleList 
                                     ref={scheduleEditorRef}
                                     schedule={sortedSchedule} 
                                     setSchedule={setSchedule} 
@@ -369,7 +378,7 @@ export default function App() {
     return (
         <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
             {/* Mobile Task Details Modal */}
-            <MobileTaskModal
+            <TaskModal
                 selectedTask={selectedTask}
                 setSelectedTaskIdx={setSelectedTaskIdx}
                 setSchedule={setSchedule}
@@ -381,13 +390,13 @@ export default function App() {
                 <Header />
                 <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
                     {/* Sidebar navigation (desktop) */}
-                    <SidebarNav view={view} setView={setView} NavItem={NavItem} />
+                    <DesktopNavBar view={view} setView={setView} NavItem={NavItem} />
                     {/* Main content: schedule, stats, or settings */}
-                    <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0">
+                    <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0 no-scrollbar">
                         {renderView()}
                     </main>
                     {/* Right details pane (desktop only) */}
-                    <RightAside
+                    <TaskDetailsSidebar
                         totalMinutes={totalMinutes}
                         totalTasks={totalTasks}
                         completedTasks={completedTasks}
@@ -403,10 +412,12 @@ export default function App() {
                         setAiMessage={setAiMessage}
                         aiLoading={aiLoading}
                         handleGeminiMessageSubmit={handleGeminiMessageSubmit}
+                        handleDeleteTask={handleDeleteTask}
+                        handleUpdateTask={handleUpdateTask}
                     />
                 </div>
                 {/* Bottom nav (mobile) */}
-                <MobileFooter view={view} setView={setView} NavItem={NavItem} />
+                <MobileNavBar view={view} setView={setView} NavItem={NavItem} />
                 <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
             </div>
         </div>

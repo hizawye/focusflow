@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ScheduleItem } from '../types.ts';
 import { ChevronDown, ChevronUp, Play, Pause } from 'lucide-react';
 
-interface ScheduleBlockProps {
+interface ScheduleItemProps {
     item: ScheduleItem;
     isActive: boolean;
     isCompleted: boolean;
@@ -19,7 +19,7 @@ const ICONS: Record<string, React.ReactNode> = {
     // Add more as needed
 };
 
-export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop }) => {
+export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop }) => {
     const [expanded, setExpanded] = useState(false);
     const color = item.color || 'primary-500';
     const icon = item.icon && ICONS[item.icon] ? ICONS[item.icon] : ICONS['check'];

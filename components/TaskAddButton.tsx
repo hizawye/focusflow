@@ -1,7 +1,7 @@
 import React from 'react';
 
 // AddTaskButton: Floating or inline add button
-export function AddTaskButton({ onClick, variant = 'floating' }: { onClick: () => void, variant?: 'floating' | 'inline' }) {
+export function TaskAddButton({ onClick, variant = 'floating' }: { onClick: () => void, variant?: 'floating' | 'inline' }) {
   if (variant === 'inline') {
     return (
       <button

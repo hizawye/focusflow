@@ -9,7 +9,7 @@ interface RightTaskDetailsProps {
   hideClose?: boolean; // Add hideClose prop
 }
 
-export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDelete, onUpdate, onClose, hideClose }) => {
+export const TaskDetailsPanel: React.FC<RightTaskDetailsProps> = ({ task, onDelete, onUpdate, onClose, hideClose }) => {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<ScheduleItem>(task);
   const [note, setNote] = useState(''); // Placeholder for notes, could be part of ScheduleItem
@@ -277,4 +277,4 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDele
   );
 };
 
-export default RightTaskDetails;
+export default TaskDetailsPanel;

@@ -1,8 +1,8 @@
 import React from 'react';
-import { RightTaskDetails } from './RightTaskDetails';
+import { TaskDetailsPanel } from './TaskDetailsPanel';
 
 // Mobile modal for task details
-export function MobileTaskModal({ selectedTask, setSelectedTaskIdx, setSchedule, selectedTaskIdx }: any) {
+export function TaskModal({ selectedTask, setSelectedTaskIdx, setSchedule, selectedTaskIdx }: any) {
   if (!selectedTask) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end md:hidden">
@@ -20,7 +20,7 @@ export function MobileTaskModal({ selectedTask, setSelectedTaskIdx, setSchedule,
           ×
         </button>
         <div className="mt-4 mb-2 w-full" style={{ minWidth: 0 }}>
-          <RightTaskDetails
+          <TaskDetailsPanel
             task={selectedTask}
             onDelete={() => {
               setSchedule((schedule: any) => schedule.filter((_: any, i: number) => i !== selectedTaskIdx));

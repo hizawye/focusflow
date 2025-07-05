@@ -18,7 +18,7 @@ const Switch: React.FC<SwitchProps> = ({ label, enabled, onChange }) => (
     </div>
 );
 
-interface SettingsViewProps {
+interface SettingsPageProps {
     isDarkMode: boolean;
     onToggleDarkMode: (value: boolean) => void;
     isAlarmEnabled: boolean;
@@ -28,7 +28,7 @@ interface SettingsViewProps {
     onClearSchedule: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ isDarkMode, onToggleDarkMode, isAlarmEnabled, onToggleAlarm, onImportSchedule, onExportSchedule, onClearSchedule }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ isDarkMode, onToggleDarkMode, isAlarmEnabled, onToggleAlarm, onImportSchedule, onExportSchedule, onClearSchedule }) => {
     const [showClearModal, setShowClearModal] = useState(false);
     const handleClear = () => setShowClearModal(true);
     const confirmClear = () => {

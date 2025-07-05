@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { ScheduleItem } from '../types.ts';
-import { ScheduleBlock } from './ScheduleBlock.tsx';
+import { ScheduleItem } from './ScheduleItem.tsx';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateScheduleWithGemini } from '../gemini';
 
-interface ScheduleEditorProps {
+interface ScheduleListProps {
     schedule: ScheduleItem[];
     setSchedule: (schedule: ScheduleItem[]) => void;
     completionStatus: { [key: string]: boolean };
@@ -34,7 +34,7 @@ const COLOR_OPTIONS = [
   { value: 'primary-500', label: 'Default', className: 'bg-primary-500' },
 ];
 
-export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({ 
+export const ScheduleList = forwardRef<any, ScheduleListProps>(({ 
     schedule,
     setSchedule,
     completionStatus,
@@ -256,7 +256,7 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
                             </form>
                         ) : (
                             <>
-                                <ScheduleBlock
+                                <ScheduleItem
                                     item={item}
                                     isActive={item.isRunning || false}
                                     isCompleted={completionStatus[item.title] || false}
@@ -365,4 +365,4 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
     );
 });
 
-export default ScheduleEditor;
+export default ScheduleList;

@@ -2,14 +2,14 @@ import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { ScheduleItem, CompletionStatus } from '../types.ts';
 
-interface StatsViewProps {
+interface StatsPageProps {
     schedule: ScheduleItem[];
     completionStatus: CompletionStatus;
 }
 
 const COLORS = ['#10b981', '#ef4444', '#f59e0b']; // Green, Red, Orange
 
-export const StatsView: React.FC<StatsViewProps> = ({ schedule, completionStatus }) => {
+export const StatsPage: React.FC<StatsPageProps> = ({ schedule, completionStatus }) => {
     const completedCount = schedule.filter(item => completionStatus[item.title]).length;
     const totalTasks = schedule.length;
     const remainingCount = totalTasks - completedCount;
