@@ -2,13 +2,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ScheduleItem, CompletionStatus, View } from './types.ts';
 import { DEFAULT_SCHEDULE } from './constants.ts';
 import { useSchedule } from './hooks/useSchedule.ts';
-import { TimerDisplay } from './components/TimerDisplay.tsx';
-import { StatsView } from './components/StatsView.tsx';
-import { SettingsView } from './components/SettingsView.tsx';
-import { PieChart, Calendar, Settings, PlayCircle } from 'lucide-react';
-import { ScheduleEditor } from './components/ScheduleEditor.tsx';
-import { RightTaskDetails } from './components/RightTaskDetails.tsx';
 import { generateScheduleWithGemini } from './gemini';
+
+import { Header } from './components/Header';
+import { PieChart } from 'lucide-react';
+import { SidebarNav } from './components/SidebarNav';
+import { RightAside } from './components/RightAside';
+import { MobileTaskModal } from './components/MobileTaskModal';
+import { MobileFooter } from './components/MobileFooter';
+import { AddTaskButton } from './components/AddTaskButton';
+import { ScheduleEditor } from './components/ScheduleEditor';
 
 const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
@@ -364,155 +367,44 @@ export default function App() {
     return (
         <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
             {/* Mobile Task Details Modal */}
-            {isMobile && selectedTask && (
-                <div className="fixed inset-0 z-50 flex items-end md:hidden">
-                    {/* Overlay */}
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedTaskIdx(null)}></div>
-                    {/* Modal */}
-                    <div className="relative w-full max-w-none h-[65vh] bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl px-4 pt-4 pb-8 flex flex-col overflow-y-auto animate-slideUp z-10" style={{minWidth:0}}>
-                        {/* Drag handle */}
-                        <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-3 mt-1"></div>
-                        <button
-                            className="absolute top-3 right-4 text-2xl text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 bg-gray-200 dark:bg-gray-700 rounded-full w-10 h-10 flex items-center justify-center z-20"
-                            onClick={() => setSelectedTaskIdx(null)}
-                            aria-label="Close details"
-                        >
-                            ×
-                        </button>
-                        <div className="mt-4 mb-2 w-full" style={{minWidth:0}}>
-                            <RightTaskDetails
-                                task={selectedTask}
-                                onDelete={() => {
-                                    setSchedule(schedule => schedule.filter((_, i) => i !== selectedTaskIdx));
-                                    setSelectedTaskIdx(null);
-                                }}
-                                onUpdate={updated => {
-                                    setSchedule(schedule => schedule.map((t, i) => i === selectedTaskIdx ? updated : t));
-                                }}
-                                onClose={() => setSelectedTaskIdx(null)}
-                                mobile
-                                hideClose // Prevent duplicate X button in mobile modal
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
-
+            <MobileTaskModal
+                selectedTask={selectedTask}
+                setSelectedTaskIdx={setSelectedTaskIdx}
+                setSchedule={setSchedule}
+                selectedTaskIdx={selectedTaskIdx}
+            />
             {/* Responsive layout: sidebar (desktop), header, main, right pane */}
-            <div className={`w-full max-w-7xl mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: '100vh'}}>
-                <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center gap-4">
-                    <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white flex-1">FocusFlow</h1>
-                    <span className="hidden md:inline text-md text-gray-600 dark:text-gray-400">Your daily command center</span>
-                </header>
+            <div className={`w-full max-w-[1800px] mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: '100vh'}}>
+                {/* App header */}
+                <Header />
                 <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
-                    {/* Sidebar nav (desktop) */}
-                    <nav className="hidden md:flex flex-col w-20 bg-white/90 dark:bg-gray-900/90 border-r border-gray-200 dark:border-gray-800 py-6 items-center gap-4 relative">
-                        <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
-                        {/* Hide Stats tab on desktop */}
-                        {/* <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon /> */}
-                        <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
-                        {/* Add task button below tabs */}
-                        <button
-                            className="mt-8 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg w-12 h-12 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-primary-300"
-                            onClick={handleSidebarAdd}
-                            aria-label="Add Block"
-                            title="Add Block"
-                            style={{ position: 'absolute', bottom: '2rem', left: '50%', transform: 'translateX(-50%)' }}
-                        >
-                            <span className="sr-only">Add Task</span>
-                            +
-                        </button>
-                    </nav>
-                    {/* Main content: make scrollable, fill available height */}
+                    {/* Sidebar navigation (desktop) */}
+                    <SidebarNav view={view} setView={setView} NavItem={NavItem} />
+                    {/* Main content: schedule, stats, or settings */}
                     <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0">
                         {renderView()}
                     </main>
                     {/* Right details pane (desktop only) */}
-                    <aside
-                        ref={rightPaneRef}
-                        tabIndex={-1}
-                        className="md:flex flex-col w-[28rem] min-w-[28rem] max-w-[28rem] bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
-                        style={{paddingBottom: '140px'}}
-                    >
-                        {/* Stats summary */}
-                        <div className="mb-4 p-3 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-100 dark:border-primary-800 text-sm">
-                            <div className="font-bold mb-1">Today's Stats</div>
-                            <div>Total scheduled: <span className="font-semibold">{Math.floor(totalMinutes/60)}h {totalMinutes%60}m</span></div>
-                            <div>Tasks: <span className="font-semibold">{totalTasks}</span></div>
-                            <div>Completed: <span className="font-semibold text-green-600">{completedTasks}</span></div>
-                            <div>Not completed: <span className="font-semibold text-red-600">{notCompletedTasks}</span></div>
-                        </div>
-                    
-                        {/* Show details if a task is selected, else show placeholder */}
-                        {selectedTask ? (
-                            <RightTaskDetails
-                                task={selectedTask}
-                                onDelete={() => {
-                                    setSchedule(schedule => schedule.filter((_, i) => i !== selectedTaskIdx));
-                                    setSelectedTaskIdx(null);
-                                }}
-                                onUpdate={updated => {
-                                    setSchedule(schedule => schedule.map((t, i) => i === selectedTaskIdx ? updated : t));
-                                }}
-                                onClose={() => setSelectedTaskIdx(null)}
-                            />
-                        ) : (
-                            <div className="text-gray-500 dark:text-gray-400 text-center mt-20">
-                                <span className="text-lg">click a task to see details</span>
-                            </div>
-                        )}
-                        {/* Gemini Generate Button and input absolutely at the bottom of aside */}
-                        <div className="absolute bottom-0 left-0 right-0 w-full bg-white/90 dark:bg-gray-900/90 border-t border-gray-200 dark:border-gray-800 p-4 z-40 flex flex-col gap-2"
-                             style={{boxShadow: "0 -2px 16px 0 rgba(0,0,0,0.04)"}}>
-                            {!showGeminiInput && (
-                                <button
-                                    className="w-full max-w-full mx-auto mb-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg font-semibold hover:from-blue-600 hover:to-green-600 transition focus:outline-none focus:ring-4 focus:ring-blue-300 z-30"
-                                    onClick={() => setShowGeminiInput(true)}
-                                    aria-label="Generate with Gemini"
-                                    type="button"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                    </svg>
-                                    Generate with Gemini
-                                </button>
-                            )}
-                            <form onSubmit={handleGeminiMessageSubmit} className="w-full bg-gradient-to-r from-blue-50 to-green-50 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-800 flex gap-2 z-20 shadow-xl rounded-b-lg p-2">
-                                <input
-                                    type="text"
-                                    className="flex-1 rounded-full border px-4 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-400 shadow-sm"
-                                    placeholder="Ask Gemini to add, edit, or remove tasks... (e.g. 'Add Trading 21:00-00:00')"
-                                    value={aiMessage}
-                                    onChange={e => setAiMessage(e.target.value)}
-                                    disabled={aiLoading}
-                                    autoComplete="off"
-                                />
-                                <button
-                                    type="submit"
-                                    className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-5 py-2 rounded-full shadow hover:from-blue-600 hover:to-green-600 transition disabled:opacity-50 font-semibold text-base"
-                                    disabled={aiLoading || !aiMessage.trim()}
-                                >
-                                    {aiLoading ? (
-                                      <span className="animate-spin mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
-                                    ) : (
-                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                      </svg>
-                                    )}
-                                    <span>{aiLoading ? 'Sending...' : 'Send'}</span>
-                                </button>
-                            </form>
-                        </div>
-                    </aside>
+                    <RightAside
+                        totalMinutes={totalMinutes}
+                        totalTasks={totalTasks}
+                        completedTasks={completedTasks}
+                        notCompletedTasks={notCompletedTasks}
+                        selectedTask={selectedTask}
+                        setSchedule={setSchedule}
+                        setSelectedTaskIdx={setSelectedTaskIdx}
+                        selectedTaskIdx={selectedTaskIdx}
+                        handleSidebarAdd={handleSidebarAdd}
+                        showGeminiInput={showGeminiInput}
+                        setShowGeminiInput={setShowGeminiInput}
+                        aiMessage={aiMessage}
+                        setAiMessage={setAiMessage}
+                        aiLoading={aiLoading}
+                        handleGeminiMessageSubmit={handleGeminiMessageSubmit}
+                    />
                 </div>
                 {/* Bottom nav (mobile) */}
-                <footer className="fixed md:hidden bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 z-40">
-                    <nav className="max-w-2xl mx-auto flex justify-around p-2">
-                        <NavItem icon={Calendar} label="Schedule" activeView={view} targetView="schedule" />
-                        <NavItem icon={PieChart} label="Stats" activeView={view} targetView="stats" dynamicIcon />
-                        <NavItem icon={Settings} label="Settings" activeView={view} targetView="settings" />
-                    </nav>
-                </footer>
+                <MobileFooter view={view} setView={setView} NavItem={NavItem} />
                 <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
             </div>
         </div>
