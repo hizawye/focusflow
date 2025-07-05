@@ -135,6 +135,14 @@ export const RightTaskDetails: React.FC<RightTaskDetailsProps> = ({ task, onDele
           <span className="text-gray-500 text-sm">{form.start} - {form.end}</span>
         )}
       </div>
+      {form.remainingDuration !== undefined && (
+        <div className="mb-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300 font-mono">Time left: {Math.floor(form.remainingDuration / 3600)}h {Math.floor((form.remainingDuration % 3600) / 60)}m {form.remainingDuration % 60}s</p>
+            <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
+                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${(form.remainingDuration / ((new Date(`1970-01-01T${form.end}:00Z`).getTime() - new Date(`1970-01-01T${form.start}:00Z`).getTime()) / 1000)) * 100}%` }}></div>
+            </div>
+        </div>
+      )}
       {/* Notes section */}
       <div className="mb-4">
         <label className="block text-sm font-medium mb-1">Notes</label>

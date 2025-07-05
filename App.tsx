@@ -56,49 +56,22 @@ export default function App() {
         DEFAULT_SCHEDULE
     );
 
-    // --- COMPLETION LOGIC ---
-    // A block is complete if now > block.end
-    const getBlockEndDate = (block: ScheduleItem) => {
-        let [h, m] = block.end.split(":").map(Number);
-        const d = new Date(now);
-        if (h === 0 && m === 0) {
-            // Treat 00:00 as end of day (23:59:59)
-            d.setHours(23, 59, 59, 999);
-        } else {
-            d.setHours(h, m, 0, 0);
-        }
-        return d;
-    };
+    const { startTask, stopTask } = useSchedule(schedule, setSchedule);
+
     const completionStatus: CompletionStatus = useMemo(() => {
         const status: CompletionStatus = {};
         schedule.forEach(block => {
-            // Use manualStatus if set, otherwise fallback to time-based
             if (block.manualStatus === 'done') status[block.title] = true;
             else if (block.manualStatus === 'missed') status[block.title] = false;
-            else status[block.title] = now > getBlockEndDate(block);
+            else status[block.title] = (block.remainingDuration !== undefined && block.remainingDuration <= 0);
         });
         return status;
-    }, [schedule, now]);
-
-    // ---
-
-    const { currentBlock, timeLeft, timeUntilNextBlock, completedBlocks } = useSchedule(schedule);
-    
-    const alarmSound = useMemo(() => 
-        typeof Audio !== 'undefined' ? new Audio('https://cdn.freesound.org/previews/411/411132_5121236-lq.mp3') : null,
-    []);
+    }, [schedule]);
 
     useEffect(() => {
         document.documentElement.classList.toggle('dark', isDarkMode);
         document.body.classList.toggle('dark:bg-gray-900', isDarkMode);
     }, [isDarkMode]);
-
-    useEffect(() => {
-      // Only play sound if user has interacted, alarms are enabled, and there's a current block.
-      if (isAlarmEnabled && currentBlock && userInteracted) {
-        alarmSound?.play().catch(e => console.error("Error playing sound:", e));
-      }
-    }, [currentBlock?.title, isAlarmEnabled, userInteracted, alarmSound]);
 
     const handleInteraction = () => {
         // This is the key: unlock audio playback by playing a sound in a user-initiated event.
@@ -239,10 +212,11 @@ export default function App() {
                                     schedule={sortedSchedule} 
                                     setSchedule={setSchedule} 
                                     completionStatus={completionStatus}
-                                    currentBlock={currentBlock}
                                     onSubTaskToggle={handleSubTaskToggle}
                                     onSelectTask={setSelectedTaskIdx}
                                     selectedTaskIdx={selectedTaskIdx}
+                                    onStart={startTask}
+                                    onStop={stopTask}
                                 />
                             </div>
                         </div>
@@ -302,6 +276,19 @@ export default function App() {
             scheduleEditorRef.current.handleAdd();
         }
     };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (rightPaneRef.current && !rightPaneRef.current.contains(event.target as Node)) {
+                setSelectedTaskIdx(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [rightPaneRef]);
 
     // --- Layout Skeleton ---
     // Mobile modal state
@@ -444,7 +431,8 @@ export default function App() {
                     <aside
                         ref={rightPaneRef}
                         tabIndex={-1}
-                        className="hidden md:flex flex-col w-80 bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
+                        className="md:flex flex-col w-[28rem] min-w-[28rem] max-w-[28rem] bg-white/80 dark:bg-gray-900/80 border-l border-gray-200 dark:border-gray-800 p-6 relative focus:outline-none"
+                        style={{paddingBottom: '140px'}}
                     >
                         {/* Stats summary */}
                         <div className="mb-4 p-3 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-100 dark:border-primary-800 text-sm">
@@ -454,14 +442,7 @@ export default function App() {
                             <div>Completed: <span className="font-semibold text-green-600">{completedTasks}</span></div>
                             <div>Not completed: <span className="font-semibold text-red-600">{notCompletedTasks}</span></div>
                         </div>
-                        {/* Move TimerDisplay here */}
-                        <div className="mb-6">
-                            <TimerDisplay 
-                                timeLeft={timeLeft} 
-                                taskName={currentBlock?.title || null} 
-                                timeUntilNextBlock={timeUntilNextBlock}
-                            />
-                        </div>
+                    
                         {/* Show details if a task is selected, else show placeholder */}
                         {selectedTask ? (
                             <RightTaskDetails
@@ -480,46 +461,48 @@ export default function App() {
                                 <span className="text-lg">click a task to see details</span>
                             </div>
                         )}
-                        {/* Gemini Generate Button above the input */}
-                        {!showGeminiInput && (
-                            <button
-                                className="w-full max-w-full mx-auto mb-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg font-semibold hover:from-blue-600 hover:to-green-600 transition focus:outline-none focus:ring-4 focus:ring-blue-300 z-30"
-                                onClick={() => setShowGeminiInput(true)}
-                                aria-label="Generate with Gemini"
-                                type="button"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                </svg>
-                                Generate with Gemini
-                            </button>
-                        )}
-                        {/* Gemini AI message input at the bottom with improved UI */}
-                        <form onSubmit={handleGeminiMessageSubmit} className="w-full p-3 bg-gradient-to-r from-blue-50 to-green-50 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-800 flex gap-2 z-20 shadow-xl rounded-b-lg">
-                            <input
-                                type="text"
-                                className="flex-1 rounded-full border px-4 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-400 shadow-sm"
-                                placeholder="Ask Gemini to add, edit, or remove tasks... (e.g. 'Add Trading 21:00-00:00')"
-                                value={aiMessage}
-                                onChange={e => setAiMessage(e.target.value)}
-                                disabled={aiLoading}
-                                autoComplete="off"
-                            />
-                            <button
-                                type="submit"
-                                className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-5 py-2 rounded-full shadow hover:from-blue-600 hover:to-green-600 transition disabled:opacity-50 font-semibold text-base"
-                                disabled={aiLoading || !aiMessage.trim()}
-                            >
-                                {aiLoading ? (
-                                  <span className="animate-spin mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
-                                ) : (
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                  </svg>
-                                )}
-                                <span>{aiLoading ? 'Sending...' : 'Send'}</span>
-                            </button>
-                        </form>
+                        {/* Gemini Generate Button and input absolutely at the bottom of aside */}
+                        <div className="absolute bottom-0 left-0 right-0 w-full bg-white/90 dark:bg-gray-900/90 border-t border-gray-200 dark:border-gray-800 p-4 z-40 flex flex-col gap-2"
+                             style={{boxShadow: "0 -2px 16px 0 rgba(0,0,0,0.04)"}}>
+                            {!showGeminiInput && (
+                                <button
+                                    className="w-full max-w-full mx-auto mb-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg font-semibold hover:from-blue-600 hover:to-green-600 transition focus:outline-none focus:ring-4 focus:ring-blue-300 z-30"
+                                    onClick={() => setShowGeminiInput(true)}
+                                    aria-label="Generate with Gemini"
+                                    type="button"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                    </svg>
+                                    Generate with Gemini
+                                </button>
+                            )}
+                            <form onSubmit={handleGeminiMessageSubmit} className="w-full bg-gradient-to-r from-blue-50 to-green-50 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-800 flex gap-2 z-20 shadow-xl rounded-b-lg p-2">
+                                <input
+                                    type="text"
+                                    className="flex-1 rounded-full border px-4 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-400 shadow-sm"
+                                    placeholder="Ask Gemini to add, edit, or remove tasks... (e.g. 'Add Trading 21:00-00:00')"
+                                    value={aiMessage}
+                                    onChange={e => setAiMessage(e.target.value)}
+                                    disabled={aiLoading}
+                                    autoComplete="off"
+                                />
+                                <button
+                                    type="submit"
+                                    className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-green-500 text-white px-5 py-2 rounded-full shadow hover:from-blue-600 hover:to-green-600 transition disabled:opacity-50 font-semibold text-base"
+                                    disabled={aiLoading || !aiMessage.trim()}
+                                >
+                                    {aiLoading ? (
+                                      <span className="animate-spin mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                    ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                      </svg>
+                                    )}
+                                    <span>{aiLoading ? 'Sending...' : 'Send'}</span>
+                                </button>
+                            </form>
+                        </div>
                     </aside>
                 </div>
                 {/* Bottom nav (mobile) */}

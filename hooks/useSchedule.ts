@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ScheduleItem } from '../types.ts';
+import { useEffect } from 'react';
+import { ScheduleItem } from '../types';
 
 const parseTime = (timeString: string) => {
     const [hours, minutes] = timeString.split(':').map(Number);
@@ -8,39 +8,52 @@ const parseTime = (timeString: string) => {
     return date;
 };
 
-export const useSchedule = (schedule: ScheduleItem[]) => {
-    const [now, setNow] = useState(new Date());
+export const useSchedule = (
+    schedule: ScheduleItem[],
+    setSchedule: (updater: (prevSchedule: ScheduleItem[]) => ScheduleItem[]) => void
+) => {
+    useEffect(() => {
+        const needsInitialization = schedule.some(item => item.remainingDuration === undefined);
+        if (needsInitialization) {
+            setSchedule(prevSchedule =>
+                prevSchedule.map(item => ({
+                    ...item,
+                    remainingDuration: item.remainingDuration ?? (parseTime(item.end).getTime() - parseTime(item.start).getTime()) / 1000,
+                    isRunning: item.isRunning ?? false,
+                }))
+            );
+        }
+    }, [schedule, setSchedule]);
 
     useEffect(() => {
         const timer = setInterval(() => {
-            setNow(new Date());
+            setSchedule(prevSchedule =>
+                prevSchedule.map(item => {
+                    if (item.isRunning && item.remainingDuration && item.remainingDuration > 0) {
+                        return { ...item, remainingDuration: item.remainingDuration - 1 };
+                    }
+                    return item;
+                })
+            );
         }, 1000);
         return () => clearInterval(timer);
-    }, []);
+    }, [setSchedule]);
 
-    const scheduleWithDates = schedule.map(item => ({
-        ...item,
-        startDate: parseTime(item.start),
-        endDate: parseTime(item.end),
-    }));
+    const startTask = (title: string) => {
+        setSchedule(prevSchedule =>
+            prevSchedule.map(item =>
+                item.title === title ? { ...item, isRunning: true } : item
+            )
+        );
+    };
 
-    const currentBlock = scheduleWithDates.find(item => now >= item.startDate && now < item.endDate) || null;
-    
-    let timeLeft = 0;
-    if (currentBlock) {
-        timeLeft = Math.max(0, currentBlock.endDate.getTime() - now.getTime());
-    }
+    const stopTask = (title: string) => {
+        setSchedule(prevSchedule =>
+            prevSchedule.map(item =>
+                item.title === title ? { ...item, isRunning: false } : item
+            )
+        );
+    };
 
-    const upcomingBlock = scheduleWithDates.find(item => now < item.startDate) || null;
-
-    let timeUntilNextBlock = 0;
-    if (!currentBlock && upcomingBlock) {
-        timeUntilNextBlock = Math.max(0, upcomingBlock.startDate.getTime() - now.getTime());
-    }
-
-    const completedBlocks = scheduleWithDates
-        .filter(item => now >= item.endDate)
-        .map(item => item.title);
-
-    return { now, currentBlock, timeLeft, timeUntilNextBlock, completedBlocks };
+    return { startTask, stopTask };
 };

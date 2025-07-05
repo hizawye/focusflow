@@ -14,6 +14,8 @@ interface ScheduleEditorProps {
     onSelectTask?: (idx: number) => void;
     selectedTaskIdx?: number | null;
     onAddTask?: () => void; // new prop
+    onStart: (title: string) => void;
+    onStop: (title: string) => void;
 }
 
 const emptyBlock: ScheduleItem = { title: '', start: '', end: '' };
@@ -36,11 +38,12 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
     schedule,
     setSchedule,
     completionStatus,
-    currentBlock,
     onSubTaskToggle,
     onSelectTask,
     selectedTaskIdx,
     onAddTask,
+    onStart,
+    onStop,
 }, ref) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [form, setForm] = useState<ScheduleItem>(emptyBlock);
@@ -255,9 +258,11 @@ export const ScheduleEditor = forwardRef<any, ScheduleEditorProps>(({
                             <>
                                 <ScheduleBlock
                                     item={item}
-                                    isActive={currentBlock?.title === item.title}
+                                    isActive={item.isRunning || false}
                                     isCompleted={completionStatus[item.title] || false}
                                     onSubTaskToggle={subIdx => onSubTaskToggle(idx, subIdx)}
+                                    onStart={() => onStart(item.title)}
+                                    onStop={() => onStop(item.title)}
                                 />
                             </>
                         )}

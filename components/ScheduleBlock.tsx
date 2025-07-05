@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { ScheduleItem } from '../types.ts';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Play, Pause } from 'lucide-react';
 
 interface ScheduleBlockProps {
     item: ScheduleItem;
     isActive: boolean;
     isCompleted: boolean;
     onSubTaskToggle: (subIdx: number) => void;
+    onStart: () => void;
+    onStop: () => void;
 }
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -17,13 +19,20 @@ const ICONS: Record<string, React.ReactNode> = {
     // Add more as needed
 };
 
-export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onSubTaskToggle }) => {
+export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop }) => {
     const [expanded, setExpanded] = useState(false);
     const color = item.color || 'primary-500';
     const icon = item.icon && ICONS[item.icon] ? ICONS[item.icon] : ICONS['check'];
     const subtasks = item.subtasks || [];
     const completedCount = subtasks.filter(t => t.completed).length;
     const progress = subtasks.length > 0 ? `${completedCount}/${subtasks.length}` : null;
+
+    const formatDuration = (seconds: number) => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h > 0 ? `${h}h ` : ''}${m > 0 ? `${m}m ` : ''}${s}s`;
+    };
 
     return (
         <div className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 \
@@ -41,18 +50,36 @@ export const ScheduleBlock: React.FC<ScheduleBlockProps> = ({ item, isActive, is
                         {isActive && <span className="ml-2 text-xs bg-primary-600 text-white rounded px-2 py-0.5">Now</span>}
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{item.start} – {item.end}</p>
+                    {item.remainingDuration !== undefined && (
+                        <>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 font-mono">Time left: {formatDuration(item.remainingDuration)}</p>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
+                                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${(item.remainingDuration / ((new Date(`1970-01-01T${item.end}:00Z`).getTime() - new Date(`1970-01-01T${item.start}:00Z`).getTime()) / 1000)) * 100}%` }}></div>
+                            </div>
+                        </>
+                    )}
                 </div>
-                {subtasks.length > 0 && (
-                    <button
-                        className="ml-2 text-gray-400 hover:text-primary-500"
-                        aria-label={expanded ? 'Collapse' : 'Expand'}
-                        onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
-                    >
-                        {expanded ? <ChevronUp /> : <ChevronDown />}
-                    </button>
-                )}
+                <div className="flex items-center gap-2 ml-2">
+                    {!item.isRunning ? (
+                        <button onClick={onStart} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600">
+                            <Play size={16} />
+                        </button>
+                    ) : (
+                        <button onClick={onStop} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600">
+                            <Pause size={16} />
+                        </button>
+                    )}
+                    {subtasks.length > 0 && (
+                        <button
+                            className="text-gray-400 hover:text-primary-500"
+                            aria-label={expanded ? 'Collapse' : 'Expand'}
+                            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+                        >
+                            {expanded ? <ChevronUp /> : <ChevronDown />}
+                        </button>
+                    )}
+                </div>
             </div>
-            {/* Only show subtasks if expanded (peek), not just because selected */}
             {expanded && subtasks.length > 0 && (
                 <div className="px-6 pb-4">
                     <ul className="space-y-2">
