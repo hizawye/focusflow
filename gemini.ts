@@ -9,8 +9,8 @@ export async function generateScheduleWithGemini(prompt: string): Promise<Schedu
   let apiKey = '';
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_GEMINI_API_KEY) {
     apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-  } else if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
-    apiKey = process.env.GEMINI_API_KEY;
+  } else if (typeof process !== 'undefined' && process.env && process.env.REACT_APP_GEMINI_API_KEY) {
+    apiKey = process.env.REACT_APP_GEMINI_API_KEY;
   }
   if (!apiKey) throw new Error('Gemini API key not found');
 
