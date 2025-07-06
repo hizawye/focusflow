@@ -155,7 +155,8 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
             setGeminiPrompt('');
         } catch (e: any) {
             alert('Gemini error: ' + (e.message || e));
-        } finally {
+        }
+ finally {
             setLoadingGemini(false);
         }
     };

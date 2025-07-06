@@ -207,7 +207,7 @@ export default function App() {
                                 {schedule.length > 0 && (() => {
                                     const first = schedule[0];
                                     const last = schedule[schedule.length - 1];
-                                    const parse = (t: string) => { const [h, m] = t.split(':').map(Number); const d = new Date(); d.setHours(h, m, 0, 0); return d; };
+                                    const parse = (t: string, baseDate: Date) => { const [h, m] = t.split(':').map(Number); const d = new Date(baseDate); d.setHours(h, m, 0, 0); return d; };
                                     const start = parse(first.start).getTime();
                                     const end = parse(last.end).getTime();
                                     const pct = Math.min(1, Math.max(0, (now.getTime() - start) / (end - start)));
@@ -355,23 +355,37 @@ export default function App() {
         }
     }
 
-    // Reset manualStatus for all schedule items at 12:01 AM
+    // Reset manualStatus and remainingDuration for all schedule items at 12:01 AM
     useEffect(() => {
-        const now = new Date();
-        // Set reset time to 12:01 AM
-        const resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0, 0);
-        const msUntilReset = resetTime.getTime() - now.getTime();
-        const resetManualStatus = () => {
+        const resetScheduleForNewDay = () => {
             setSchedule(prev => prev.map(item => {
-                const { manualStatus, ...rest } = item;
-                return rest;
+                const { manualStatus, remainingDuration, isRunning, ...rest } = item;
+                const now = new Date();
+                const start = parseTime(item.start, now);
+                let end = parseTime(item.end, now);
+
+                if (end.getTime() < start.getTime()) {
+                    end.setDate(end.getDate() + 1);
+                }
+
+                return {
+                    ...rest,
+                    remainingDuration: (end.getTime() - start.getTime()) / 1000,
+                    isRunning: false,
+                };
             }));
         };
+
+        const now = new Date();
+        const resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0, 0); // 12:01 AM next day
+        const msUntilReset = resetTime.getTime() - now.getTime();
+
         const timeout = setTimeout(() => {
-            resetManualStatus();
+            resetScheduleForNewDay();
             // Set interval for future days (24h)
-            setInterval(resetManualStatus, 24 * 60 * 60 * 1000);
+            setInterval(resetScheduleForNewDay, 24 * 60 * 60 * 1000);
         }, msUntilReset);
+
         return () => clearTimeout(timeout);
     }, [setSchedule]);
 

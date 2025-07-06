@@ -18,7 +18,7 @@ export async function generateScheduleWithGemini(prompt: string): Promise<Schedu
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: `${prompt}\n\nReply ONLY with a JSON array of schedule blocks, each with: title, start, end, and notes. Example:\n[{\"title\": \"Trading\", \"start\": \"21:00\", \"end\": \"22:00\", \"notes\": \"Trading time\"}]` }] }],
+      contents: [{ parts: [{ text: prompt }] }],
     }),
   });
   const data = await res.json();

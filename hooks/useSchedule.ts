@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { ScheduleItem } from '../types';
 
-const parseTime = (timeString: string) => {
+const parseTime = (timeString: string, baseDate: Date) => {
     const [hours, minutes] = timeString.split(':').map(Number);
-    const date = new Date();
+    const date = new Date(baseDate);
     date.setHours(hours, minutes, 0, 0);
     return date;
 };
@@ -16,11 +16,24 @@ export const useSchedule = (
         const needsInitialization = schedule.some(item => item.remainingDuration === undefined);
         if (needsInitialization) {
             setSchedule(prevSchedule =>
-                prevSchedule.map(item => ({
-                    ...item,
-                    remainingDuration: item.remainingDuration ?? (parseTime(item.end).getTime() - parseTime(item.start).getTime()) / 1000,
-                    isRunning: item.isRunning ?? false,
-                }))
+                prevSchedule.map(item => {
+                    if (item.remainingDuration === undefined) {
+                        const now = new Date();
+                        const start = parseTime(item.start, now);
+                        let end = parseTime(item.end, now);
+
+                        // If end time is earlier than start time, it means it's on the next day
+                        if (end.getTime() < start.getTime()) {
+                            end.setDate(end.getDate() + 1);
+                        }
+                        return {
+                            ...item,
+                            remainingDuration: item.remainingDuration ?? ((end.getTime() - start.getTime()) / 1000),
+                            isRunning: item.isRunning ?? false,
+                        };
+                    }
+                    return item;
+                })
             );
         }
     }, [schedule, setSchedule]);
