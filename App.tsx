@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ScheduleItem, CompletionStatus, View } from './types.ts';
-import { DEFAULT_SCHEDULE } from './constants.ts';
-import { useSchedule } from './hooks/useSchedule.ts';
-import { generateScheduleWithGemini } from './gemini';
+import { View } from './types.ts';
+import { useScheduleFromConvex, useCompletionStatusFromConvex } from './hooks/useConvexSchedule.ts';
 
 import { Header } from './components/Header';
 import { PieChart } from 'lucide-react';
@@ -10,32 +8,9 @@ import { DesktopNavBar } from './components/DesktopNavBar';
 import { TaskDetailsSidebar } from './components/TaskDetailsSidebar';
 import { TaskModal } from './components/TaskModal';
 import { MobileNavBar } from './components/MobileNavBar';
-import { TaskAddButton } from './components/TaskAddButton';
 import { ScheduleList } from './components/ScheduleList';
 import { SettingsPage } from './components/SettingsPage';
 import { StatsPage } from './components/StatsPage';
-
-const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-    const [state, setState] = useState<T>(() => {
-        try {
-            const storedValue = localStorage.getItem(key);
-            return storedValue ? JSON.parse(storedValue) : defaultValue;
-        } catch (error) {
-            console.error(`Error reading localStorage key "${key}":`, error);
-            return defaultValue;
-        }
-    });
-
-    useEffect(() => {
-        try {
-            localStorage.setItem(key, JSON.stringify(state));
-        } catch (error) {
-            console.error(`Error setting localStorage key "${key}":`, error);
-        }
-    }, [key, state]);
-
-    return [state, setState];
-};
 
 export default function App() {
     const rightPaneRef = useRef<HTMLDivElement | null>(null);
@@ -47,118 +22,23 @@ export default function App() {
         return () => clearInterval(interval);
     }, []);
 
-    const [view, setView] = usePersistentState<View>('app-view', 'schedule');
-    const [isDarkMode, setIsDarkMode] = usePersistentState<boolean>('app-dark-mode', false);
-    const [isAlarmEnabled, setIsAlarmEnabled] = usePersistentState<boolean>('app-alarm-enabled', true);
-    
-    // Persist userInteracted state so welcome popup only shows once
-    const [userInteracted, setUserInteracted] = usePersistentState<boolean>('app-user-interacted', false);
+    const [view, setView] = useState<View>('schedule');
+    const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+    const [isAlarmEnabled, setIsAlarmEnabled] = useState<boolean>(true);
 
-    // Replace static DAILY_BLOCKS with persistent, user-editable schedule
-    // Load schedule from localStorage, or use defaultSchedule, or blank
-    const [schedule, setSchedule] = usePersistentState<ScheduleItem[]>(
-        'app-schedule',
-        DEFAULT_SCHEDULE
-    );
-
-    const { startTask, stopTask } = useSchedule(schedule, setSchedule);
-
-    const completionStatus: CompletionStatus = useMemo(() => {
-        const status: CompletionStatus = {};
-        schedule.forEach(block => {
-            if (block.manualStatus === 'done') status[block.title] = true;
-            else if (block.manualStatus === 'missed') status[block.title] = false;
-            else status[block.title] = (block.remainingDuration !== undefined && block.remainingDuration <= 0);
-        });
-        return status;
-    }, [schedule]);
-
-    useEffect(() => {
-        document.documentElement.classList.toggle('dark', isDarkMode);
-        document.body.classList.toggle('dark:bg-gray-900', isDarkMode);
-    }, [isDarkMode]);
-
-    const handleInteraction = () => {
-        // This is the key: unlock audio playback by playing a sound in a user-initiated event.
-        // We play and immediately pause so the user doesn't hear it now, but this allows future plays.
-        if (alarmSound) {
-            alarmSound.play().then(() => {
-                alarmSound.pause();
-                alarmSound.currentTime = 0;
-            }).catch(e => {
-                console.info("Audio context could not be initialized on interaction:", e);
-            });
-        }
-        setUserInteracted(true);
-    };
-
-    // Import schedule from JSON file
-    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const imported = JSON.parse(event.target?.result as string);
-                if (Array.isArray(imported)) {
-                    setSchedule(imported);
-                }
-            } catch (err) {
-                alert('Invalid schedule file.');
-            }
-        };
-        reader.readAsText(file);
-    };
-
-    // Export schedule to JSON file (without progress)
-    const handleExport = () => {
-        const exportData = schedule.map(({subtasks, ...rest}) => ({
-            ...rest,
-            ...(subtasks ? {subtasks: subtasks.map(({completed, ...s}) => ({...s}))} : {})
-        }));
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'my_schedule.json';
-        a.click();
-        URL.revokeObjectURL(url);
-    };
-
-    // Start with blank schedule
-    const handleStartBlank = () => {
-        if (window.confirm('Start with a blank schedule? This will erase your current schedule.')) {
-            setSchedule([]);
-        }
-    };
-
-    // Handler to toggle subtask completion
-    const handleSubTaskToggle = (blockIdx: number, subIdx: number) => {
-        setSchedule(prev => {
-            const updated = prev.map((block, i) => {
-                if (i !== blockIdx) return block;
-                if (!block.subtasks) return block;
-                const newSubtasks = block.subtasks.map((sub, j) =>
-                    j === subIdx ? { ...sub, completed: !sub.completed } : sub
-                );
-                return { ...block, subtasks: newSubtasks };
-            });
-            return updated;
-        });
-    };
-
-    const handleDeleteTask = (title: string) => {
-        setSchedule(prev => prev.filter(task => task.title !== title));
-        setSelectedTaskIdx(null);
-    };
-
-    const handleUpdateTask = (updatedTask: ScheduleItem) => {
-        setSchedule(prev => prev.map(task => task.title === updatedTask.title ? updatedTask : task));
-    };
+    // Convex hooks for schedule and completion status
+    const today = new Date().toISOString().split('T')[0];
+    const { 
+        scheduleItems: schedule, 
+        exportSchedule, 
+        importSchedule, 
+        clearSchedule 
+    } = useScheduleFromConvex(today);
+    const { completionStatus } = useCompletionStatusFromConvex(today);
 
     // --- Sort schedule by start time for display ---
     const sortedSchedule = useMemo(() => {
-        return [...schedule].sort((a, b) => {
+        return [...(schedule || [])].sort((a, b) => {
             const [ah, am] = a.start.split(":").map(Number);
             const [bh, bm] = b.start.split(":").map(Number);
             return ah !== bh ? ah - bh : am - bm;
@@ -169,17 +49,75 @@ export default function App() {
     const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
     const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
 
+    // --- Import/Export/Clear handlers ---
+    /**
+     * Export current schedule as JSON file
+     */
+    const handleExportSchedule = () => {
+        console.log('📤 Exporting schedule...');
+        try {
+            const jsonData = exportSchedule();
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `focusflow-schedule-${today}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            console.log('✅ Schedule exported successfully');
+        } catch (error) {
+            console.error('❌ Error exporting schedule:', error);
+            alert('Failed to export schedule. Please try again.');
+        }
+    };
+
+    /**
+     * Import schedule from JSON file
+     */
+    const handleImportSchedule = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        console.log('📥 Importing schedule from file:', file.name);
+        try {
+            const text = await file.text();
+            await importSchedule(text);
+            console.log('✅ Schedule imported successfully');
+            // Clear the file input
+            e.target.value = '';
+        } catch (error) {
+            console.error('❌ Error importing schedule:', error);
+            alert('Failed to import schedule. Please check the file format and try again.');
+        }
+    };
+
+    /**
+     * Clear all schedule items
+     */
+    const handleClearSchedule = async () => {
+        console.log('🧹 Clearing schedule...');
+        try {
+            await clearSchedule();
+            console.log('✅ Schedule cleared successfully');
+        } catch (error) {
+            console.error('❌ Error clearing schedule:', error);
+            alert('Failed to clear schedule. Please try again.');
+        }
+    };
+
     // --- Right pane stats ---
-    const totalTasks = schedule.length;
-    const completedTasks = Object.values(completionStatus).filter(Boolean).length;
+    const totalTasks = schedule ? schedule.length : 0;
+    const completedTasks = completionStatus ? Object.values(completionStatus).filter(Boolean).length : 0;
     const notCompletedTasks = totalTasks - completedTasks;
-    const totalMinutes = schedule.reduce((total, block) => {
+    const totalMinutes = schedule ? schedule.reduce((total, block) => {
         const [startH, startM] = block.start.split(':').map(Number);
         const [endH, endM] = block.end.split(':').map(Number);
         const start = startH * 60 + startM;
         const end = endH * 60 + endM;
         return total + Math.max(0, end - start);
-    }, 0);
+    }, 0) : 0;
 
     const renderView = () => {
         switch (view) {
@@ -191,9 +129,9 @@ export default function App() {
                     onToggleDarkMode={setIsDarkMode}
                     isAlarmEnabled={isAlarmEnabled}
                     onToggleAlarm={setIsAlarmEnabled}
-                    onImportSchedule={handleImport}
-                    onExportSchedule={handleExport}
-                    onClearSchedule={handleStartBlank}
+                    onImportSchedule={handleImportSchedule}
+                    onExportSchedule={handleExportSchedule}
+                    onClearSchedule={handleClearSchedule}
                 />;
             case 'schedule':
             default:
@@ -207,7 +145,7 @@ export default function App() {
                                 {schedule.length > 0 && (() => {
                                     const first = schedule[0];
                                     const last = schedule[schedule.length - 1];
-                                    const parse = (t: string, baseDate: Date) => { const [h, m] = t.split(':').map(Number); const d = new Date(baseDate); d.setHours(h, m, 0, 0); return d; };
+                                    const parse = (t: string) => { const [h, m] = t.split(':').map(Number); const d = new Date(now); d.setHours(h, m, 0, 0); return d; };
                                     const start = parse(first.start).getTime();
                                     const end = parse(last.end).getTime();
                                     const pct = Math.min(1, Math.max(0, (now.getTime() - start) / (end - start)));
@@ -224,13 +162,9 @@ export default function App() {
                                 <ScheduleList 
                                     ref={scheduleEditorRef}
                                     schedule={sortedSchedule} 
-                                    setSchedule={setSchedule} 
                                     completionStatus={completionStatus}
-                                    onSubTaskToggle={handleSubTaskToggle}
                                     onSelectTask={setSelectedTaskIdx}
                                     selectedTaskIdx={selectedTaskIdx}
-                                    onStart={startTask}
-                                    onStop={stopTask}
                                 />
                             </div>
                         </div>
@@ -318,76 +252,24 @@ export default function App() {
     }, [isMobile, selectedTask]);
 
     // Gemini AI message input state
-    const [aiMessage, setAiMessage] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-    const [showGeminiInput, setShowGeminiInput] = useState(false);
-
-    // Helper to apply Gemini actions to the current schedule
-    function applyGeminiActions(schedule: ScheduleItem[], actions: any[]): ScheduleItem[] {
-      let updated = [...schedule];
-      for (const action of actions) {
-        if (action.action === 'add' && action.item) {
-          updated.push(action.item);
-        } else if (action.action === 'edit' && action.target && action.item) {
-          updated = updated.map(item => item.title === action.target ? { ...item, ...action.item } : item);
-        } else if (action.action === 'remove' && action.target) {
-          updated = updated.filter(item => item.title !== action.target);
-        }
-      }
-      return updated;
-    }
-
-    // Handler for Gemini AI message submit
-    async function handleGeminiMessageSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        if (!aiMessage.trim()) return;
-        setAiLoading(true);
-        // Send current schedule and ask for actions
-        const prompt = `My current schedule is:\n${JSON.stringify(schedule, null, 2)}\n\nUser request: ${aiMessage}\n\nReply ONLY with a JSON array of actions to add, edit, or remove schedule blocks. Each action should be one of:\n- { \"action\": \"add\", \"item\": { ... } }\n- { \"action\": \"edit\", \"target\": \"title\", \"item\": { ... } }\n- { \"action\": \"remove\", \"target\": \"title\" }\n\nExample:\n[\n  { \"action\": \"add\", \"item\": { \"title\": \"Trading\", \"start\": \"21:00\", \"end\": \"22:00\", \"notes\": \"Trading time\" } }\n]`;
-        try {
-            const actions = await generateScheduleWithGemini(prompt);
-            setSchedule(prev => applyGeminiActions(prev, actions));
-            setAiMessage('');
-        } catch (e: any) {
-            alert('Gemini error: ' + (e.message || e));
-        } finally {
-            setAiLoading(false);
-        }
-    }
-
+    // TODO: Implement Gemini integration with Convex
+    // The gemini integration needs to be updated to work with Convex mutations
+    
     // Reset manualStatus and remainingDuration for all schedule items at 12:01 AM
     useEffect(() => {
-        const resetScheduleForNewDay = () => {
-            setSchedule(prev => prev.map(item => {
-                const { manualStatus, remainingDuration, isRunning, ...rest } = item;
-                const now = new Date();
-                const start = parseTime(item.start, now);
-                let end = parseTime(item.end, now);
+        // TODO: Implement Convex mutation to reset schedule for new day
+        // This effect previously called setSchedule, which is now removed.
+    }, []);
 
-                if (end.getTime() < start.getTime()) {
-                    end.setDate(end.getDate() + 1);
-                }
-
-                return {
-                    ...rest,
-                    remainingDuration: (end.getTime() - start.getTime()) / 1000,
-                    isRunning: false,
-                };
-            }));
-        };
-
-        const now = new Date();
-        const resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0, 0); // 12:01 AM next day
-        const msUntilReset = resetTime.getTime() - now.getTime();
-
-        const timeout = setTimeout(() => {
-            resetScheduleForNewDay();
-            // Set interval for future days (24h)
-            setInterval(resetScheduleForNewDay, 24 * 60 * 60 * 1000);
-        }, msUntilReset);
-
-        return () => clearTimeout(timeout);
-    }, [setSchedule]);
+    useEffect(() => {
+        if (isDarkMode) {
+            document.documentElement.classList.add('dark');
+            document.body.classList.add('dark:bg-gray-900');
+        } else {
+            document.documentElement.classList.remove('dark');
+            document.body.classList.remove('dark:bg-gray-900');
+        }
+    }, [isDarkMode]);
 
     return (
         <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
@@ -395,7 +277,6 @@ export default function App() {
             <TaskModal
                 selectedTask={selectedTask}
                 setSelectedTaskIdx={setSelectedTaskIdx}
-                setSchedule={setSchedule}
                 selectedTaskIdx={selectedTaskIdx}
             />
             {/* Responsive layout: sidebar (desktop), header, main, right pane */}
@@ -416,18 +297,9 @@ export default function App() {
                         completedTasks={completedTasks}
                         notCompletedTasks={notCompletedTasks}
                         selectedTask={selectedTask}
-                        setSchedule={setSchedule}
                         setSelectedTaskIdx={setSelectedTaskIdx}
                         selectedTaskIdx={selectedTaskIdx}
                         handleSidebarAdd={handleSidebarAdd}
-                        showGeminiInput={showGeminiInput}
-                        setShowGeminiInput={setShowGeminiInput}
-                        aiMessage={aiMessage}
-                        setAiMessage={setAiMessage}
-                        aiLoading={aiLoading}
-                        handleGeminiMessageSubmit={handleGeminiMessageSubmit}
-                        handleDeleteTask={handleDeleteTask}
-                        handleUpdateTask={handleUpdateTask}
                     />
                 </div>
                 {/* Bottom nav (mobile) */}
