@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npx convex dev\" \"vite dev\"",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -22,6 +22,7 @@
     "@types/node": "^22.14.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "concurrently": "^7.6.0",
     "typescript": "~5.7.2",
     "vite": "^6.3.5"
   }
