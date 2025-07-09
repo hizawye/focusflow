@@ -49,10 +49,75 @@ export default function App() {
     const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
     const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
 
+    // Timer state management
+    const [runningTaskTitle, setRunningTaskTitle] = useState<string | null>(null);
+    const [timers, setTimers] = useState<{[key: string]: number}>({});
+
+    // Timer effect - runs every second for active timers
+    useEffect(() => {
+        if (!runningTaskTitle) return;
+
+        const interval = setInterval(() => {
+            setTimers(prev => {
+                const newTimers = { ...prev };
+                if (newTimers[runningTaskTitle] > 0) {
+                    newTimers[runningTaskTitle] -= 1;
+                } else {
+                    // Timer finished
+                    setRunningTaskTitle(null);
+                    // TODO: Show completion notification
+                    console.log('⏰ Timer finished for:', runningTaskTitle);
+                }
+                return newTimers;
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [runningTaskTitle]);
+
+    // Initialize timer durations when schedule changes
+    useEffect(() => {
+        if (schedule) {
+            const newTimers: {[key: string]: number} = {};
+            schedule.forEach(item => {
+                if (item.remainingDuration !== undefined) {
+                    newTimers[item.title] = item.remainingDuration;
+                } else {
+                    // Calculate duration from start/end times
+                    const [startH, startM] = item.start.split(':').map(Number);
+                    const [endH, endM] = item.end.split(':').map(Number);
+                    const durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                    newTimers[item.title] = durationMinutes * 60; // Convert to seconds
+                }
+            });
+            setTimers(newTimers);
+        }
+    }, [schedule]);
+
+    // Handle timer start/stop
+    const handleStartTimer = (title: string) => {
+        console.log('� Starting timer for:', title);
+        // Stop any other running timer
+        if (runningTaskTitle && runningTaskTitle !== title) {
+            console.log('🔴 Stopping previous timer for:', runningTaskTitle);
+        }
+        setRunningTaskTitle(title);
+        // TODO: Update Convex with isRunning state
+    };
+
+    const handleStopTimer = (title: string) => {
+        console.log('🔴 Stopping timer for:', title);
+        setRunningTaskTitle(null);
+        // TODO: Update Convex with isRunning state
+    };
+
     // Handle task selection - don't close panel if same task is clicked
     const handleTaskSelection = (idx: number) => {
         // Always keep the task selected, don't toggle off
-        setSelectedTaskIdx(idx);
+        // Use setTimeout to ensure this runs after any potential outside click handler
+        setTimeout(() => {
+            setSelectedTaskIdx(idx);
+        }, 0);
     };
 
     // --- Import/Export/Clear handlers ---
@@ -171,6 +236,10 @@ export default function App() {
                                     completionStatus={completionStatus}
                                     onSelectTask={handleTaskSelection}
                                     selectedTaskIdx={selectedTaskIdx}
+                                    onStart={handleStartTimer}
+                                    onStop={handleStopTimer}
+                                    runningTaskTitle={runningTaskTitle}
+                                    timers={timers}
                                 />
                             </div>
                         </div>
@@ -240,6 +309,12 @@ export default function App() {
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            // Don't close if clicking on a task item or any of its children
+            if ((event.target as HTMLElement).closest('.schedule-item') || 
+                (event.target as HTMLElement).closest('[data-task-item]')) {
+                return;
+            }
+            
             if (rightPaneRef.current && !rightPaneRef.current.contains(event.target as Node)) {
                 setSelectedTaskIdx(null);
             }
