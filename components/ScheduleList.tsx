@@ -23,6 +23,8 @@ interface ScheduleListProps {
     onAddTask?: () => void;                     // Add task button handler
     onStart?: (title: string) => void;          // Start timer handler
     onStop?: (title: string) => void;           // Stop timer handler
+    runningTaskTitle?: string | null;           // Title of currently running task
+    timers?: {[key: string]: number};           // Timer state for each task
 }
 
 // Default empty block template for new schedule items
@@ -69,6 +71,8 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     onAddTask,
     onStart,
     onStop,
+    runningTaskTitle,
+    timers,
 }, ref) => {
     // ===== STATE MANAGEMENT =====
     
@@ -748,7 +752,11 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                             ) : (
                                 <>
                                     <ScheduleItem
-                                        item={item}
+                                        item={{
+                                            ...item,
+                                            isRunning: runningTaskTitle === item.title,
+                                            remainingDuration: timers?.[item.title] || item.remainingDuration
+                                        }}
                                         isActive={item.isRunning || false}
                                         isCompleted={completionStatus[item.title] || false}
                                         onSubTaskToggle={(subIdx: number) => onSubTaskToggle?.(idx, subIdx)}
