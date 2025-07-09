@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScheduleItem } from '../types.ts';
+import type { ScheduleItem } from '../types.ts';
 import { ChevronDown, ChevronUp, Play, Pause } from 'lucide-react';
 
 interface ScheduleItemProps {
@@ -9,6 +9,7 @@ interface ScheduleItemProps {
     onSubTaskToggle: (subIdx: number) => void;
     onStart: () => void;
     onStop: () => void;
+    onSelect?: () => void;
 }
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -19,9 +20,8 @@ const ICONS: Record<string, React.ReactNode> = {
     // Add more as needed
 };
 
-export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop }) => {
+export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop, onSelect }) => {
     const [expanded, setExpanded] = useState(false);
-    const color = item.color || 'primary-500';
     const icon = item.icon && ICONS[item.icon] ? ICONS[item.icon] : ICONS['check'];
     const subtasks = item.subtasks || [];
     const completedCount = subtasks.filter(t => t.completed).length;
@@ -34,12 +34,32 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
         return `${h > 0 ? `${h}h ` : ''}${m > 0 ? `${m}m ` : ''}${s}s`;
     };
 
+    const handleMainClick = (e: React.MouseEvent) => {
+        // Don't trigger selection if clicking on interactive elements
+        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) {
+            return;
+        }
+        
+        // Expand/collapse subtasks
+        setExpanded(prev => !prev);
+        
+        // Trigger selection for sidebar - this will keep the panel open if same task is clicked
+        if (onSelect) {
+            onSelect();
+        }
+    };
+
+    const handleStartStop = (e: React.MouseEvent, action: () => void) => {
+        e.stopPropagation();
+        action();
+    };
+
     return (
         <div className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 \
             ${isActive ? 'ring-2 ring-primary-400 bg-primary-50 dark:bg-primary-900/30' : ''} \
             ${isCompleted ? 'bg-gray-200 dark:bg-gray-800 opacity-60 grayscale text-gray-400' : 'bg-white dark:bg-gray-800'}`}
         >
-            <div className="flex items-center p-4 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+            <div className="flex items-center p-4 cursor-pointer" onClick={handleMainClick}>
                 <div className={`mr-3 text-2xl`}>
                     {icon}
                 </div>
@@ -61,11 +81,11 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
                 </div>
                 <div className="flex items-center gap-2 ml-2">
                     {!item.isRunning ? (
-                        <button onClick={onStart} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600">
+                        <button onClick={(e) => handleStartStop(e, onStart)} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600">
                             <Play size={16} />
                         </button>
                     ) : (
-                        <button onClick={onStop} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600">
+                        <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600">
                             <Pause size={16} />
                         </button>
                     )}

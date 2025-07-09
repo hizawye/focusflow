@@ -320,23 +320,29 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     // ===== GEMINI AI HANDLERS =====
     
     /**
-     * Generate schedule using Gemini AI
-     * Takes natural language prompt and generates schedule items
+     * Generate a single task using Gemini AI
+     * Takes natural language prompt and generates a single schedule item
      */
     const handleGeminiGenerate = async () => {
         if (!geminiPrompt.trim()) return;
         
-        console.log('🤖 Generating schedule with Gemini:', geminiPrompt);
+        console.log('🤖 Generating task with Gemini:', geminiPrompt);
         setLoadingGemini(true);
         
         try {
-            const generatedSchedule = await generateScheduleWithGemini(geminiPrompt);
-            console.log('✅ Schedule generated successfully:', generatedSchedule);
+            const generatedSchedule = await generateScheduleWithGemini(
+                `Create a single schedule item based on this description: "${geminiPrompt}". 
+                Return only one task in the JSON array format with title, start time, and end time.
+                Make sure the times are realistic and in HH:MM format.
+                Example format: [{"title": "Study Math", "start": "09:00", "end": "10:30"}]`
+            );
             
-            // Add generated items to schedule
-            // This would require batch operations - for now, add one by one
-            for (const item of generatedSchedule) {
-                await addScheduleItem(item);
+            console.log('✅ Task generated successfully:', generatedSchedule);
+            
+            // Take only the first item if multiple were generated
+            const taskToAdd = generatedSchedule[0];
+            if (taskToAdd) {
+                await addScheduleItem(taskToAdd);
             }
             
             // Reset Gemini state
@@ -344,8 +350,48 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
             setShowGeminiInput(false);
             
         } catch (error) {
-            console.error('❌ Error generating schedule:', error);
-            alert('Failed to generate schedule. Please try again.');
+            console.error('❌ Error generating task:', error);
+            alert('Failed to generate task. Please try again.');
+        } finally {
+            setLoadingGemini(false);
+        }
+    };
+
+    /**
+     * Use AI to help fill the current form
+     * Takes natural language and fills form fields
+     */
+    const handleAIFormFill = async () => {
+        if (!geminiPrompt.trim()) return;
+        
+        console.log('🤖 Getting AI help for form:', geminiPrompt);
+        setLoadingGemini(true);
+        
+        try {
+            const generatedSchedule = await generateScheduleWithGemini(
+                `Based on this description: "${geminiPrompt}", create a single task with title, start time, and end time.
+                Return only one task in JSON array format with realistic times in HH:MM format.
+                Example: [{"title": "Study Math", "start": "09:00", "end": "10:30"}]`
+            );
+            
+            const aiTask = generatedSchedule[0];
+            if (aiTask) {
+                // Fill the form with AI-generated data
+                setForm({
+                    ...form,
+                    title: aiTask.title || form.title,
+                    start: aiTask.start || form.start,
+                    end: aiTask.end || form.end
+                });
+            }
+            
+            // Reset Gemini state
+            setGeminiPrompt('');
+            setShowGeminiInput(false);
+            
+        } catch (error) {
+            console.error('❌ Error getting AI help:', error);
+            alert('Failed to get AI help. Please try again.');
         } finally {
             setLoadingGemini(false);
         }
@@ -359,7 +405,7 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
      */
     useImperativeHandle(ref, () => ({
         addItem: handleAdd,
-        // Add more methods as needed
+        showGeminiInput: () => setShowGeminiInput(true)
     }));
 
     // ===== RENDER HELPERS =====
@@ -377,10 +423,20 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
             }}
             className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 mb-4"
         >
-            {/* Form title */}
-            <h3 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">
-                {editingIndex !== null ? 'Edit Schedule Item' : 'Add New Schedule Item'}
-            </h3>
+            {/* Form title and AI helper */}
+            <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+                    {editingIndex !== null ? 'Edit Schedule Item' : 'Add New Schedule Item'}
+                </h3>
+                <button
+                    type="button"
+                    onClick={() => setShowGeminiInput(true)}
+                    className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center gap-1 text-sm"
+                >
+                    <span role="img" aria-label="AI">🤖</span>
+                    AI Help
+                </button>
+            </div>
 
             {/* Basic fields */}
             <div className="space-y-4">
@@ -540,172 +596,199 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     );
 
     /**
-     * Render the Gemini AI input section
-     * Allows users to generate schedules using natural language
+     * Render the Gemini AI input form
+     * Shows form for generating schedule items with AI
      */
-    const renderGeminiInput = () => (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800 mb-4">
-            <h3 className="text-lg font-semibold mb-2 text-blue-800 dark:text-blue-200">
-                🤖 AI Schedule Generator
-            </h3>
-            <p className="text-sm text-blue-600 dark:text-blue-300 mb-3">
-                Describe your day and let AI generate a schedule for you!
-            </p>
-            
-            <div className="space-y-3">
-                <textarea
-                    value={geminiPrompt}
-                    onChange={(e) => setGeminiPrompt(e.target.value)}
-                    placeholder="Example: I need to study for 3 hours, have lunch, go to gym, and work on my project..."
-                    className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white resize-none"
-                    rows={3}
-                />
-                
-                <div className="flex justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setShowGeminiInput(false)}
-                        className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleGeminiGenerate}
-                        disabled={loadingGemini || !geminiPrompt.trim()}
-                        className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {loadingGemini ? (
-                            <>
-                                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                Generating...
-                            </>
-                        ) : (
-                            '✨ Generate Schedule'
-                        )}
-                    </button>
+    const renderGeminiInput = () => {
+        const isFormOpen = adding || editingIndex !== null;
+        
+        return (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-lg w-full animate-fade-in">
+                    <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white flex items-center gap-2">
+                        <span role="img" aria-label="AI">🤖</span> 
+                        {isFormOpen ? 'AI Form Helper' : 'Create Task with AI'}
+                    </h3>
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {isFormOpen ? 'Describe what you want to do with this task' : 'Describe the task you want to create'}
+                        </label>
+                        <textarea
+                            value={geminiPrompt}
+                            onChange={(e) => setGeminiPrompt(e.target.value)}
+                            placeholder={isFormOpen ? 
+                                "Example: Make this a 2-hour study session starting at 2pm" : 
+                                "Example: Create a 2-hour study session for math from 2pm to 4pm"
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white min-h-[120px]"
+                        />
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={isFormOpen ? handleAIFormFill : handleGeminiGenerate}
+                            disabled={loadingGemini || !geminiPrompt.trim()}
+                            className="flex-1 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                            {loadingGemini ? (
+                                <>
+                                    <span className="animate-spin">⚡</span>
+                                    {isFormOpen ? 'Helping...' : 'Creating...'}
+                                </>
+                            ) : (
+                                <>{isFormOpen ? 'Fill Form' : 'Create Task'}</>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowGeminiInput(false);
+                                setGeminiPrompt('');
+                            }}
+                            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     // ===== MAIN RENDER =====
     return (
-        <div className="space-y-3">
-            {schedule.length === 0 && (
-                <div className="text-center text-gray-400 py-8">
-                    <Plus className="mx-auto mb-2 w-10 h-10 text-primary-400" />
-                    <div className="text-lg">No blocks yet. Click the <span className='inline-block align-middle'><Plus className='inline w-5 h-5' /></span> button to add your first block!</div>
-                </div>
-            )}
-            {schedule.map((item, idx) => {
-                // Only allow inline editing on mobile (md:hidden)
-                const isEditing = editingIndex === idx && typeof window !== 'undefined' && window.innerWidth < 768;
-                return (
-                    <div
-                        key={item.title + item.start}
-                        ref={el => { blockRefs.current[idx] = el; }}
-                        className={`relative group ${selectedTaskIdx === idx ? 'ring-2 ring-primary-500 ring-offset-2 z-10 bg-primary-50 dark:bg-primary-900/30' : ''}`}
-                        onClick={() => onSelectTask && editingIndex === null && !adding ? onSelectTask(idx) : undefined}
-                        tabIndex={0}
-                        aria-selected={selectedTaskIdx === idx}
-                        role="button"
-                        aria-label={`Open details for ${item.title}`}
-                    >
-                        {isEditing ? (
-                            <form onSubmit={handleSave} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in md:hidden">
-                                <input
-                                    name="title"
-                                    value={form.title}
-                                    onChange={handleInputChange}
-                                    placeholder="Title"
-                                    className="w-full p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
-                                    autoFocus
-                                />
-                                <div className="flex gap-2">
-                                    <input
-                                        type="time"
-                                        name="start"
-                                        value={form.start}
-                                        onChange={handleInputChange}
-                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
-                                    />
-                                    <input
-                                        type="time"
-                                        name="end"
-                                        value={form.end}
-                                        onChange={handleInputChange}
-                                        className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
-                                    />
-                                </div>
-                                <div className="flex gap-2 items-center mt-2">
-                                    <label className="text-sm">Icon:</label>
-                                    <select value={form.icon || ''} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="rounded border p-1 text-gray-900 dark:text-white bg-white dark:bg-gray-800">
-                                        <option value="">None</option>
-                                        {ICON_OPTIONS.map(opt => (
-                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                        ))}
-                                    </select>
-                                    <label className="text-sm ml-4">Color:</label>
-                                    <div className="flex gap-1">
-                                        {COLOR_OPTIONS.map(opt => (
-                                            <button type="button" key={opt.value} className={`w-6 h-6 rounded-full border-2 ${form.color === opt.value ? 'border-black' : 'border-transparent'} ${opt.className}`} onClick={() => setForm({ ...form, color: opt.value })} aria-label={opt.label}></button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="mt-2">
-                                    <label className="text-sm font-medium">Sub-tasks:</label>
-                                    <div className="flex gap-2 mt-1">
-                                        <input
-                                            type="text"
-                                            value={subtaskInput}
-                                            onChange={e => setSubtaskInput(e.target.value)}
-                                            placeholder="Add sub-task"
-                                            className="flex-1 p-2 rounded border text-gray-900 dark:text-white bg-white dark:bg-gray-800"
-                                        />
-                                        <button type="button" onClick={handleAddSubtask} className="bg-primary-500 text-white px-3 py-1 rounded hover:bg-primary-600">Add</button>
-                                    </div>
-                                    <ul className="mt-2 space-y-1">
-                                        {subtasks.map((sub, i) => (
-                                            <li key={sub.id} className="flex items-center gap-2">
-                                                <input type="checkbox" checked={sub.completed} onChange={e => { e.stopPropagation(); handleSubtaskToggle(i); }} />
-                                                <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
-                                                <button type="button" onClick={() => handleRemoveSubtask(i)} className="text-xs text-red-500 ml-2">Remove</button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                                <div className="flex gap-2 mt-2">
-                                    <button type="submit" className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Save</button>
-                                    <button type="button" className="flex-1 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded" onClick={handleCancel}>Cancel</button>
-                                </div>
-                            </form>
-                        ) : (
-                            <>
-                                <ScheduleItem
-                                    item={item}
-                                    isActive={item.isRunning || false}
-                                    isCompleted={completionStatus[item.title] || false}
-                                    onSubTaskToggle={(subIdx: number) => onSubTaskToggle?.(idx, subIdx)}
-                                    onStart={() => onStart?.(item.title)}
-                                    onStop={() => onStop?.(item.title)}
-                                />
-                            </>
-                        )}
+        <div className="relative">
+            {/* Schedule Items */}
+            <div className="space-y-3">
+                {schedule.length === 0 && (
+                    <div className="text-center text-gray-400 py-8">
+                        <Plus className="mx-auto mb-2 w-10 h-10 text-primary-400" />
+                        <div className="text-lg">No blocks yet. Click the <span className='inline-block align-middle'><Plus className='inline w-5 h-5' /></span> button to add your first block!</div>
                     </div>
-                );
-            })}
+                )}
+                {schedule.map((item, idx) => {
+                    // Only allow inline editing on mobile (md:hidden)
+                    const isEditing = editingIndex === idx && typeof window !== 'undefined' && window.innerWidth < 768;
+                    return (
+                        <div
+                            key={item.title + item.start}
+                            ref={el => { blockRefs.current[idx] = el; }}
+                            className={`relative group ${selectedTaskIdx === idx ? 'ring-2 ring-primary-500 ring-offset-2 z-10 bg-primary-50 dark:bg-primary-900/30' : ''}`}
+                            tabIndex={0}
+                            aria-selected={selectedTaskIdx === idx}
+                            role="button"
+                            aria-label={`Open details for ${item.title}`}
+                        >
+                            {isEditing ? (
+                                <form onSubmit={handleSave} className="mb-2 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2 border border-primary-200 dark:border-primary-700 animate-fade-in md:hidden">
+                                    <input
+                                        name="title"
+                                        value={form.title}
+                                        onChange={handleInputChange}
+                                        placeholder="Title"
+                                        className="w-full p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                                        autoFocus
+                                    />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="time"
+                                            name="start"
+                                            value={form.start}
+                                            onChange={handleInputChange}
+                                            className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                                        />
+                                        <input
+                                            type="time"
+                                            name="end"
+                                            value={form.end}
+                                            onChange={handleInputChange}
+                                            className="w-1/2 p-2 rounded border focus:ring-2 focus:ring-primary-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                                        />
+                                    </div>
+                                    <div className="flex gap-2 items-center mt-2">
+                                        <label className="text-sm">Icon:</label>
+                                        <select value={form.icon || ''} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="rounded border p-1 text-gray-900 dark:text-white bg-white dark:bg-gray-800">
+                                            <option value="">None</option>
+                                            {ICON_OPTIONS.map(opt => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                        </select>
+                                        <label className="text-sm ml-4">Color:</label>
+                                        <div className="flex gap-1">
+                                            {COLOR_OPTIONS.map(opt => (
+                                                <button type="button" key={opt.value} className={`w-6 h-6 rounded-full border-2 ${form.color === opt.value ? 'border-black' : 'border-transparent'} ${opt.className}`} onClick={() => setForm({ ...form, color: opt.value })} aria-label={opt.label}></button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="mt-2">
+                                        <label className="text-sm font-medium">Sub-tasks:</label>
+                                        <div className="flex gap-2 mt-1">
+                                            <input
+                                                type="text"
+                                                value={subtaskInput}
+                                                onChange={e => setSubtaskInput(e.target.value)}
+                                                placeholder="Add sub-task"
+                                                className="flex-1 p-2 rounded border text-gray-900 dark:text-white bg-white dark:bg-gray-800"
+                                            />
+                                            <button type="button" onClick={handleAddSubtask} className="bg-primary-500 text-white px-3 py-1 rounded hover:bg-primary-600">Add</button>
+                                        </div>
+                                        <ul className="mt-2 space-y-1">
+                                            {subtasks.map((sub, i) => (
+                                                <li key={sub.id} className="flex items-center gap-2">
+                                                    <input type="checkbox" checked={sub.completed} onChange={e => { e.stopPropagation(); handleSubtaskToggle(i); }} />
+                                                    <span className={sub.completed ? 'line-through text-gray-400' : ''}>{sub.text}</span>
+                                                    <button type="button" onClick={() => handleRemoveSubtask(i)} className="text-xs text-red-500 ml-2">Remove</button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                    <div className="flex gap-2 mt-2">
+                                        <button type="submit" className="flex-1 bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition">Save</button>
+                                        <button type="button" className="flex-1 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded" onClick={handleCancel}>Cancel</button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <>
+                                    <ScheduleItem
+                                        item={item}
+                                        isActive={item.isRunning || false}
+                                        isCompleted={completionStatus[item.title] || false}
+                                        onSubTaskToggle={(subIdx: number) => onSubTaskToggle?.(idx, subIdx)}
+                                        onStart={() => onStart?.(item.title)}
+                                        onStop={() => onStop?.(item.title)}
+                                        onSelect={() => onSelectTask && editingIndex === null && !adding ? onSelectTask(idx) : undefined}
+                                    />
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Add form */}
             {adding && renderForm()}
-            {/* Only show add button on mobile */}
-            <button
-                className="fixed bottom-20 right-4 left-auto md:hidden z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-primary-300"
-                onClick={handleAdd}
-                disabled={adding || editingIndex !== null}
-                aria-label="Add Block"
-                title="Add Block"
-                style={{maxWidth: '100vw'}}>
-                <Plus className="w-8 h-8" />
-            </button>
+            
+            {/* Action buttons */}
+            <div className="fixed bottom-20 right-4 left-auto md:hidden z-40 flex flex-col gap-4">
+                {/* AI Button */}
+                <button
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-indigo-300"
+                    onClick={() => setShowGeminiInput(true)}
+                    disabled={adding || editingIndex !== null}
+                    aria-label="Use AI"
+                    title="Use AI to generate schedule">
+                    <span role="img" aria-label="AI" className="text-2xl">🤖</span>
+                </button>
+                {/* Add Button */}
+                <button
+                    className="bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-primary-300"
+                    onClick={handleAdd}
+                    disabled={adding || editingIndex !== null}
+                    aria-label="Add Block"
+                    title="Add Block">
+                    <Plus className="w-8 h-8" />
+                </button>
+            </div>
+
+            {/* Delete confirmation modal */}
             {deleteIndex !== null && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-xs w-full text-center animate-fade-in">
@@ -719,6 +802,8 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                     </div>
                 </div>
             )}
+
+            {/* Gemini AI input modal */}
             {showGeminiInput && renderGeminiInput()}
         </div>
     );

@@ -11,6 +11,7 @@ export function TaskDetailsSidebar({
   selectedTask,
   setSelectedTaskIdx,
   handleSidebarAdd,
+  handleGeminiAdd,
   handleDeleteTask = () => {},
   handleUpdateTask = () => {}
 }: any) {
@@ -63,7 +64,7 @@ export function TaskDetailsSidebar({
         style={{ boxShadow: "0 -2px 16px 0 rgba(0,0,0,0.04)" }}>
         {/* Add Task button */}
         <div className="flex flex-row gap-2 w-full mb-2">
-          <TaskAddButton onClick={handleSidebarAdd} variant="inline" />
+          <TaskAddButton onClick={handleSidebarAdd} onAiClick={handleGeminiAdd} variant="inline" />
         </div>
       </div>
     </aside>

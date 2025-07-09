@@ -49,6 +49,12 @@ export default function App() {
     const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
     const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
 
+    // Handle task selection - don't close panel if same task is clicked
+    const handleTaskSelection = (idx: number) => {
+        // Always keep the task selected, don't toggle off
+        setSelectedTaskIdx(idx);
+    };
+
     // --- Import/Export/Clear handlers ---
     /**
      * Export current schedule as JSON file
@@ -163,7 +169,7 @@ export default function App() {
                                     ref={scheduleEditorRef}
                                     schedule={sortedSchedule} 
                                     completionStatus={completionStatus}
-                                    onSelectTask={setSelectedTaskIdx}
+                                    onSelectTask={handleTaskSelection}
                                     selectedTaskIdx={selectedTaskIdx}
                                 />
                             </div>
@@ -217,6 +223,13 @@ export default function App() {
             <span className="text-xs font-medium">{label}</span>
         </button>
     )
+
+    // Add handler to trigger Gemini AI form in ScheduleEditor
+    const handleGeminiAdd = () => {
+        if (scheduleEditorRef.current && typeof scheduleEditorRef.current.showGeminiInput === 'function') {
+            scheduleEditorRef.current.showGeminiInput();
+        }
+    };
 
     // Add handler to trigger add form in ScheduleEditor
     const handleSidebarAdd = () => {
@@ -300,6 +313,7 @@ export default function App() {
                         setSelectedTaskIdx={setSelectedTaskIdx}
                         selectedTaskIdx={selectedTaskIdx}
                         handleSidebarAdd={handleSidebarAdd}
+                        handleGeminiAdd={handleGeminiAdd}
                     />
                 </div>
                 {/* Bottom nav (mobile) */}
