@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "concurrently \"npx convex dev\" \"vite dev\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'No linter configured'",
+    "format": "echo 'No formatter configured'"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.33.0",
