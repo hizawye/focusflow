@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import type { ScheduleItem } from '../types.ts';
+import type { ScheduleItem as ScheduleItemType } from '../types.ts';
 import { ChevronDown, ChevronUp, Play, Pause } from 'lucide-react';
 
 interface ScheduleItemProps {
-    item: ScheduleItem;
+    item: ScheduleItemType;
     isActive: boolean;
     isCompleted: boolean;
     onSubTaskToggle: (subIdx: number) => void;
@@ -40,6 +40,9 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
             return;
         }
         
+        // Stop event propagation to prevent outside click handler
+        e.stopPropagation();
+        
         // Expand/collapse subtasks
         setExpanded(prev => !prev);
         
@@ -51,41 +54,53 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
 
     const handleStartStop = (e: React.MouseEvent, action: () => void) => {
         e.stopPropagation();
+        e.preventDefault();
         action();
     };
 
     return (
-        <div className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 \
+        <div 
+            className={`rounded-xl shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 mb-2 schedule-item \
             ${isActive ? 'ring-2 ring-primary-400 bg-primary-50 dark:bg-primary-900/30' : ''} \
-            ${isCompleted ? 'bg-gray-200 dark:bg-gray-800 opacity-60 grayscale text-gray-400' : 'bg-white dark:bg-gray-800'}`}
+            ${isCompleted ? 'bg-gray-200 dark:bg-gray-800 opacity-60 grayscale text-gray-400' : 'bg-white dark:bg-gray-800'} \
+            ${item.isRunning ? 'ring-2 ring-green-400 bg-green-50 dark:bg-green-900/30 animate-pulse' : ''}`}
+            data-task-item
         >
             <div className="flex items-center p-4 cursor-pointer" onClick={handleMainClick}>
-                <div className={`mr-3 text-2xl`}>
+                <div className={`mr-3 text-2xl ${item.isRunning ? 'animate-bounce' : ''}`}>
                     {icon}
                 </div>
                 <div className="flex-grow">
                     <div className="flex items-center gap-2">
-                        <h3 className={`font-bold text-lg ${isCompleted ? 'line-through' : ''}`}>{item.title}</h3>
+                        <h3 className={`font-bold text-lg ${isCompleted ? 'line-through' : ''} ${item.isRunning ? 'text-green-600 dark:text-green-400' : ''}`}>
+                            {item.title}
+                        </h3>
                         {progress && <span className="text-xs bg-gray-200 dark:bg-gray-700 rounded px-2 py-0.5 font-semibold">{progress}</span>}
                         {isActive && <span className="ml-2 text-xs bg-primary-600 text-white rounded px-2 py-0.5">Now</span>}
+                        {item.isRunning && <span className="ml-2 text-xs bg-green-600 text-white rounded px-2 py-0.5 animate-pulse">Running</span>}
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{item.start} – {item.end}</p>
                     {item.remainingDuration !== undefined && (
                         <>
-                            <p className="text-sm text-gray-600 dark:text-gray-300 font-mono">Time left: {formatDuration(item.remainingDuration)}</p>
+                            <p className={`text-sm font-mono ${item.isRunning ? 'text-green-600 dark:text-green-400 font-bold' : 'text-gray-600 dark:text-gray-300'}`}>
+                                Time left: {formatDuration(item.remainingDuration)}
+                            </p>
                             <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
-                                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${(item.remainingDuration / ((new Date(`1970-01-01T${item.end}:00Z`).getTime() - new Date(`1970-01-01T${item.start}:00Z`).getTime()) / 1000)) * 100}%` }}></div>
+                                <div 
+                                    className={`h-2.5 rounded-full transition-all duration-1000 ${item.isRunning ? 'bg-green-500 animate-pulse' : 'bg-blue-600'}`}
+                                    style={{ width: `${(item.remainingDuration / ((new Date(`1970-01-01T${item.end}:00Z`).getTime() - new Date(`1970-01-01T${item.start}:00Z`).getTime()) / 1000)) * 100}%` }}
+                                ></div>
                             </div>
                         </>
                     )}
                 </div>
                 <div className="flex items-center gap-2 ml-2">
                     {!item.isRunning ? (
-                        <button onClick={(e) => handleStartStop(e, onStart)} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600">
+                        <button onClick={(e) => handleStartStop(e, onStart)} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors">
                             <Play size={16} />
                         </button>
                     ) : (
-                        <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600">
+                        <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors animate-pulse">
                             <Pause size={16} />
                         </button>
                     )}
