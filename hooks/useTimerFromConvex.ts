@@ -37,12 +37,13 @@ export const useTimerFromConvex = (date: string) => {
   const startTimer = async (id: Id<"scheduleItems">) => {
     console.log('🟢 Starting timer for schedule item:', id);
     try {
-      await startTimerMutation({
+      const result = await startTimerMutation({
         id,
         userId: MOCK_USER_ID,
         date,
       });
-      console.log('✅ Timer started successfully');
+      console.log('✅ Timer started successfully with result:', result);
+      return result;
     } catch (error) {
       console.error('❌ Error starting timer:', error);
       throw error;

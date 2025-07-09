@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View } from './types.ts';
 import { useScheduleFromConvex, useCompletionStatusFromConvex } from './hooks/useConvexSchedule.ts';
+import { useTimerFromConvex } from './hooks/useTimerFromConvex.ts';
+import { Id } from './convex/_generated/dataModel.ts';
 
 import { Header } from './components/Header';
 import { PieChart } from 'lucide-react';
@@ -35,6 +37,17 @@ export default function App() {
         clearSchedule 
     } = useScheduleFromConvex(today);
     const { completionStatus } = useCompletionStatusFromConvex(today);
+    
+    // Timer hook from Convex
+    const {
+        runningTimer,
+        startTimer,
+        stopTimer,
+        pauseTimer,
+        resumeTimer,
+        updateTimerDuration,
+        isLoading: isTimerLoading
+    } = useTimerFromConvex(today);
 
     // --- Sort schedule by start time for display ---
     const sortedSchedule = useMemo(() => {
@@ -50,21 +63,70 @@ export default function App() {
     const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
 
     // Timer state management
-    const [runningTaskTitle, setRunningTaskTitle] = useState<string | null>(null);
     const [timers, setTimers] = useState<{[key: string]: number}>({});
+    // Track the currently running task title for UI updates
+    const [runningTaskTitle, setRunningTaskTitle] = useState<string | null>(null);
+    const [runningTaskId, setRunningTaskId] = useState<Id<"scheduleItems"> | null>(null);
+
+    // Update local running task state from Convex
+    useEffect(() => {
+        console.log("⚡ Timer loading state changed:", { isTimerLoading, runningTimer });
+        
+        if (!isTimerLoading) {
+            if (runningTimer) {
+                console.log("📱 Found running timer in Convex:", runningTimer);
+                
+                setRunningTaskTitle(prevTitle => {
+                    const newTitle = prevTitle !== runningTimer.title ? runningTimer.title : prevTitle;
+                    console.log("⚙️ Setting runningTaskTitle:", { prevTitle, newTitle });
+                    return newTitle;
+                });
+                
+                setRunningTaskId(prevId => {
+                    const newId = prevId !== runningTimer._id ? runningTimer._id : prevId;
+                    console.log("⚙️ Setting runningTaskId:", { prevId, newId });
+                    return newId;
+                });
+            } else {
+                console.log("🔄 No running timer found in Convex");
+                
+                setRunningTaskTitle(prevTitle => {
+                    const newTitle = prevTitle !== null ? null : prevTitle;
+                    console.log("⚙️ Clearing runningTaskTitle:", { prevTitle, newTitle });
+                    return newTitle;
+                });
+                
+                setRunningTaskId(prevId => {
+                    const newId = prevId !== null ? null : prevId;
+                    console.log("⚙️ Clearing runningTaskId:", { prevId, newId });
+                    return newId;
+                });
+            }
+        }
+    }, [runningTimer, isTimerLoading]);
 
     // Timer effect - runs every second for active timers
     useEffect(() => {
-        if (!runningTaskTitle) return;
+        if (!runningTaskTitle || !runningTaskId) return;
+        
+        // Check if the timer is paused by using runningTimer from Convex
+        if (runningTimer?.isPaused) return;
 
         const interval = setInterval(() => {
             setTimers(prev => {
                 const newTimers = { ...prev };
                 if (newTimers[runningTaskTitle] > 0) {
                     newTimers[runningTaskTitle] -= 1;
+                    
+                    // Update Convex with new remaining time every 5 seconds
+                    if (newTimers[runningTaskTitle] % 5 === 0) {
+                        updateTimerDuration(runningTaskId, newTimers[runningTaskTitle])
+                            .catch(err => console.error('Failed to update timer duration:', err));
+                    }
                 } else {
                     // Timer finished
-                    setRunningTaskTitle(null);
+                    stopTimer(runningTaskId)
+                        .catch(err => console.error('Failed to stop timer:', err));
                     // TODO: Show completion notification
                     console.log('⏰ Timer finished for:', runningTaskTitle);
                 }
@@ -73,7 +135,7 @@ export default function App() {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [runningTaskTitle]);
+    }, [runningTaskTitle, runningTaskId, runningTimer, updateTimerDuration, stopTimer]);
 
     // Initialize timer durations when schedule changes
     useEffect(() => {
@@ -90,25 +152,84 @@ export default function App() {
                     newTimers[item.title] = durationMinutes * 60; // Convert to seconds
                 }
             });
-            setTimers(newTimers);
+            
+            // Use a function form to avoid unnecessary re-renders if values are the same
+            setTimers(prev => {
+                // Only update if there are actual changes
+                const hasChanges = Object.keys(newTimers).some(key => 
+                    !prev[key] || prev[key] !== newTimers[key]
+                ) || Object.keys(prev).some(key => !newTimers[key]);
+                
+                return hasChanges ? newTimers : prev;
+            });
         }
-    }, [schedule]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(schedule?.map(item => ({
+        title: item.title,
+        remainingDuration: item.remainingDuration,
+        start: item.start,
+        end: item.end
+    })))]);
 
-    // Handle timer start/stop
+    // Handle timer start/stop/pause/resume
     const handleStartTimer = (title: string) => {
-        console.log('� Starting timer for:', title);
-        // Stop any other running timer
-        if (runningTaskTitle && runningTaskTitle !== title) {
-            console.log('🔴 Stopping previous timer for:', runningTaskTitle);
+        console.log('🟢 Starting timer for:', title);
+        const item = schedule.find(item => item.title === title);
+        
+        console.log('📌 Item found:', item ? {
+            id: item._id,
+            title: item.title,
+            isRunning: item.isRunning,
+            isPaused: item.isPaused
+        } : 'No item found');
+        
+        if (item && item._id) {
+            console.log('🔄 Calling startTimer with ID:', item._id);
+            startTimer(item._id)
+                .then(() => console.log('✅ Timer started successfully'))
+                .catch(err => console.error('❌ Failed to start timer:', err));
+        } else {
+            console.error('❌ Cannot start timer: Invalid item or missing ID');
         }
-        setRunningTaskTitle(title);
-        // TODO: Update Convex with isRunning state
     };
 
     const handleStopTimer = (title: string) => {
         console.log('🔴 Stopping timer for:', title);
-        setRunningTaskTitle(null);
-        // TODO: Update Convex with isRunning state
+        const item = schedule.find(item => item.title === title);
+        
+        console.log('📌 Item found:', item ? {
+            id: item._id,
+            title: item.title,
+            isRunning: item.isRunning,
+            isPaused: item.isPaused
+        } : 'No item found');
+        
+        if (item && item._id) {
+            console.log('🔄 Calling stopTimer with ID:', item._id);
+            stopTimer(item._id)
+                .then(() => console.log('✅ Timer stopped successfully'))
+                .catch(err => console.error('❌ Failed to stop timer:', err));
+        } else {
+            console.error('❌ Cannot stop timer: Invalid item or missing ID');
+        }
+    };
+    
+    const handlePauseTimer = (title: string) => {
+        console.log('⏸️ Pausing timer for:', title);
+        const item = schedule.find(item => item.title === title);
+        if (item && item._id && item.isRunning && !item.isPaused) {
+            pauseTimer(item._id)
+                .catch(err => console.error('Failed to pause timer:', err));
+        }
+    };
+    
+    const handleResumeTimer = (title: string) => {
+        console.log('▶️ Resuming timer for:', title);
+        const item = schedule.find(item => item.title === title);
+        if (item && item._id && item.isRunning && item.isPaused) {
+            resumeTimer(item._id)
+                .catch(err => console.error('Failed to resume timer:', err));
+        }
     };
 
     // Handle task selection - don't close panel if same task is clicked
@@ -238,6 +359,8 @@ export default function App() {
                                     selectedTaskIdx={selectedTaskIdx}
                                     onStart={handleStartTimer}
                                     onStop={handleStopTimer}
+                                    onPause={handlePauseTimer}
+                                    onResume={handleResumeTimer}
                                     runningTaskTitle={runningTaskTitle}
                                     timers={timers}
                                 />

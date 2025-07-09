@@ -23,6 +23,8 @@ interface ScheduleListProps {
     onAddTask?: () => void;                     // Add task button handler
     onStart?: (title: string) => void;          // Start timer handler
     onStop?: (title: string) => void;           // Stop timer handler
+    onPause?: (title: string) => void;          // Pause timer handler
+    onResume?: (title: string) => void;         // Resume timer handler
     runningTaskTitle?: string | null;           // Title of currently running task
     timers?: {[key: string]: number};           // Timer state for each task
 }
@@ -71,6 +73,8 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     onAddTask,
     onStart,
     onStop,
+    onPause,
+    onResume,
     runningTaskTitle,
     timers,
 }, ref) => {
@@ -754,14 +758,17 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                                     <ScheduleItem
                                         item={{
                                             ...item,
-                                            isRunning: runningTaskTitle === item.title,
+                                            // Force the isRunning state from the runningTaskTitle prop
+                                            isRunning: runningTaskTitle === item.title ? true : false,
                                             remainingDuration: timers?.[item.title] || item.remainingDuration
                                         }}
-                                        isActive={item.isRunning || false}
+                                        isActive={runningTaskTitle === item.title}
                                         isCompleted={completionStatus[item.title] || false}
                                         onSubTaskToggle={(subIdx: number) => onSubTaskToggle?.(idx, subIdx)}
                                         onStart={() => onStart?.(item.title)}
                                         onStop={() => onStop?.(item.title)}
+                                        onPause={() => onPause?.(item.title)}
+                                        onResume={() => onResume?.(item.title)}
                                         onSelect={() => onSelectTask && editingIndex === null && !adding ? onSelectTask(idx) : undefined}
                                     />
                                 </>

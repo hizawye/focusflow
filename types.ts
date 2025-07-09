@@ -1,3 +1,5 @@
+import { Id } from "./convex/_generated/dataModel";
+
 export interface SubTask {
   id: string;
   text: string;
@@ -5,6 +7,7 @@ export interface SubTask {
 }
 
 export interface ScheduleItem {
+  _id?: Id<"scheduleItems">; // Convex ID for the item
   title: string;
   start: string;
   end: string;

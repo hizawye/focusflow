@@ -221,6 +221,7 @@ export const useScheduleFromConvex = (date: string) => {
 
   // Convert Convex data to the format expected by the app
   const convertedItems: ScheduleItem[] = scheduleItems?.map(item => ({
+    _id: item._id, // Include the Convex ID
     title: item.title,
     start: item.start,
     end: item.end,
