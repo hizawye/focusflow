@@ -10,6 +10,10 @@ export interface ScheduleItem {
   end: string;
   remainingDuration?: number;
   isRunning?: boolean;
+  isPaused?: boolean;
+  pausedAt?: number; // timestamp when paused
+  startedAt?: number; // timestamp when timer started
+  totalElapsed?: number; // total elapsed time in seconds
   subtasks?: SubTask[];
   icon?: string; // e.g. 'brain', 'coffee', etc.
   color?: string; // e.g. 'blue', 'green', etc.

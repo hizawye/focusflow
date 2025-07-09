@@ -9,6 +9,10 @@ export default defineSchema({
     end: v.string(),
     remainingDuration: v.optional(v.number()),
     isRunning: v.optional(v.boolean()),
+    isPaused: v.optional(v.boolean()),
+    pausedAt: v.optional(v.number()), // timestamp when paused
+    startedAt: v.optional(v.number()), // timestamp when timer started
+    totalElapsed: v.optional(v.number()), // total elapsed time in seconds
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
     manualStatus: v.optional(v.union(v.literal("done"), v.literal("missed"))),

@@ -48,6 +48,10 @@ export const createScheduleItem = mutation({
     date: v.string(),
     remainingDuration: v.optional(v.number()),
     isRunning: v.optional(v.boolean()),
+    isPaused: v.optional(v.boolean()),
+    pausedAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    totalElapsed: v.optional(v.number()),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
     manualStatus: v.optional(v.union(v.literal("done"), v.literal("missed"))),
@@ -62,6 +66,10 @@ export const createScheduleItem = mutation({
       date: args.date,
       remainingDuration: args.remainingDuration,
       isRunning: args.isRunning,
+      isPaused: args.isPaused,
+      pausedAt: args.pausedAt,
+      startedAt: args.startedAt,
+      totalElapsed: args.totalElapsed,
       icon: args.icon,
       color: args.color,
       manualStatus: args.manualStatus,
@@ -82,6 +90,10 @@ export const updateScheduleItem = mutation({
     end: v.optional(v.string()),
     remainingDuration: v.optional(v.number()),
     isRunning: v.optional(v.boolean()),
+    isPaused: v.optional(v.boolean()),
+    pausedAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    totalElapsed: v.optional(v.number()),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
     manualStatus: v.optional(v.union(v.literal("done"), v.literal("missed"))),
@@ -127,6 +139,10 @@ export const setScheduleItems = mutation({
       end: v.string(),
       remainingDuration: v.optional(v.number()),
       isRunning: v.optional(v.boolean()),
+      isPaused: v.optional(v.boolean()),
+      pausedAt: v.optional(v.number()),
+      startedAt: v.optional(v.number()),
+      totalElapsed: v.optional(v.number()),
       icon: v.optional(v.string()),
       color: v.optional(v.string()),
       manualStatus: v.optional(v.union(v.literal("done"), v.literal("missed"))),
@@ -171,5 +187,164 @@ export const setScheduleItems = mutation({
     }
     
     return insertedIds;
+  },
+});
+
+// Timer-specific mutations
+
+// Start timer for a specific schedule item
+export const startTimer = mutation({
+  args: {
+    id: v.id("scheduleItems"),
+    userId: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // First, stop any other running timers for this user on this date
+    const allItems = await ctx.db
+      .query("scheduleItems")
+      .withIndex("by_user_and_date", (q) => 
+        q.eq("userId", args.userId).eq("date", args.date)
+      )
+      .collect();
+
+    // Stop all other running timers
+    for (const item of allItems) {
+      if (item._id !== args.id && item.isRunning) {
+        await ctx.db.patch(item._id, {
+          isRunning: false,
+          isPaused: false,
+          pausedAt: undefined,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Start the requested timer
+    await ctx.db.patch(args.id, {
+      isRunning: true,
+      isPaused: false,
+      startedAt: now,
+      pausedAt: undefined,
+      updatedAt: now,
+    });
+  },
+});
+
+// Stop timer for a specific schedule item
+export const stopTimer = mutation({
+  args: {
+    id: v.id("scheduleItems"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Get current item to calculate elapsed time
+    const item = await ctx.db.get(args.id);
+    if (!item) return;
+    
+    let newTotalElapsed = item.totalElapsed || 0;
+    
+    // Calculate elapsed time if timer was running
+    if (item.isRunning && item.startedAt) {
+      const sessionStart = item.isPaused ? item.pausedAt! : item.startedAt;
+      const sessionElapsed = Math.floor((now - sessionStart) / 1000);
+      newTotalElapsed += sessionElapsed;
+    }
+    
+    // Update remaining duration
+    const newRemainingDuration = Math.max(0, (item.remainingDuration || 0) - newTotalElapsed);
+    
+    await ctx.db.patch(args.id, {
+      isRunning: false,
+      isPaused: false,
+      startedAt: undefined,
+      pausedAt: undefined,
+      totalElapsed: newTotalElapsed,
+      remainingDuration: newRemainingDuration,
+      updatedAt: now,
+    });
+  },
+});
+
+// Pause timer for a specific schedule item
+export const pauseTimer = mutation({
+  args: {
+    id: v.id("scheduleItems"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Get current item to calculate elapsed time
+    const item = await ctx.db.get(args.id);
+    if (!item || !item.isRunning) return;
+    
+    let newTotalElapsed = item.totalElapsed || 0;
+    
+    // Calculate elapsed time since start/resume
+    if (item.startedAt) {
+      const sessionStart = item.isPaused ? item.pausedAt! : item.startedAt;
+      const sessionElapsed = Math.floor((now - sessionStart) / 1000);
+      newTotalElapsed += sessionElapsed;
+    }
+    
+    await ctx.db.patch(args.id, {
+      isPaused: true,
+      pausedAt: now,
+      totalElapsed: newTotalElapsed,
+      updatedAt: now,
+    });
+  },
+});
+
+// Resume timer for a specific schedule item
+export const resumeTimer = mutation({
+  args: {
+    id: v.id("scheduleItems"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    await ctx.db.patch(args.id, {
+      isPaused: false,
+      pausedAt: undefined,
+      startedAt: now, // Reset start time for accurate calculation
+      updatedAt: now,
+    });
+  },
+});
+
+// Update timer duration in real-time
+export const updateTimerDuration = mutation({
+  args: {
+    id: v.id("scheduleItems"),
+    remainingDuration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      remainingDuration: args.remainingDuration,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Get currently running timer for a user on a specific date
+export const getRunningTimer = query({
+  args: {
+    userId: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const runningItem = await ctx.db
+      .query("scheduleItems")
+      .withIndex("by_user_and_date", (q) => 
+        q.eq("userId", args.userId).eq("date", args.date)
+      )
+      .filter((q) => q.eq(q.field("isRunning"), true))
+      .first();
+    
+    return runningItem;
   },
 });
