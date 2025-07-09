@@ -220,8 +220,8 @@ export default function App() {
 
     // Add handler to trigger add form in ScheduleEditor
     const handleSidebarAdd = () => {
-        if (scheduleEditorRef.current && typeof scheduleEditorRef.current.handleAdd === 'function') {
-            scheduleEditorRef.current.handleAdd();
+        if (scheduleEditorRef.current && typeof scheduleEditorRef.current.addItem === 'function') {
+            scheduleEditorRef.current.addItem();
         }
     };
 
