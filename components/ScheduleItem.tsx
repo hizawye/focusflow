@@ -83,8 +83,23 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
                         {item.isRunning && !item.isPaused && <span className="ml-2 text-xs bg-green-600 text-white rounded px-2 py-0.5 animate-pulse">Running</span>}
                         {item.isPaused && <span className="ml-2 text-xs bg-yellow-600 text-white rounded px-2 py-0.5">Paused</span>}
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{item.start} – {item.end}</p>
-                    {item.remainingDuration !== undefined && (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                        {item.isTimeless ? (
+                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded-full text-xs">
+                                No specific time
+                            </span>
+                        ) : (
+                            <>
+                                <span>{item.start} – {item.end}</span>
+                                {item.isFlexible && (
+                                    <span className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full text-xs">
+                                        Flexible ({item.duration}min)
+                                    </span>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    {item.remainingDuration !== undefined && !item.isTimeless && (
                         <>
                             <p className={`text-sm font-mono ${item.isRunning && !item.isPaused ? 'text-green-600 dark:text-green-400 font-bold' : ''} ${item.isPaused ? 'text-yellow-600 dark:text-yellow-400 font-bold' : 'text-gray-600 dark:text-gray-300'}`}>
                                 Time left: {formatDuration(item.remainingDuration)}
@@ -92,40 +107,59 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
                             <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
                                 <div 
                                     className={`h-2.5 rounded-full transition-all duration-1000 ${item.isRunning && !item.isPaused ? 'bg-green-500 animate-pulse' : ''} ${item.isPaused ? 'bg-yellow-500' : 'bg-blue-600'}`}
-                                    style={{ width: `${(item.remainingDuration / ((new Date(`1970-01-01T${item.end}:00Z`).getTime() - new Date(`1970-01-01T${item.start}:00Z`).getTime()) / 1000)) * 100}%` }}
+                                    style={{ 
+                                        width: `${(() => {
+                                            if (item.duration) {
+                                                // For flexible tasks with duration, use the duration
+                                                return (item.remainingDuration / (item.duration * 60)) * 100;
+                                            } else if (item.start && item.end) {
+                                                // For fixed tasks, calculate from start/end times
+                                                const startTime = new Date(`1970-01-01T${item.start}:00Z`).getTime();
+                                                const endTime = new Date(`1970-01-01T${item.end}:00Z`).getTime();
+                                                const totalDuration = (endTime - startTime) / 1000;
+                                                return (item.remainingDuration / totalDuration) * 100;
+                                            } else {
+                                                return 0;
+                                            }
+                                        })()}%` 
+                                    }}
                                 ></div>
                             </div>
                         </>
                     )}
                 </div>
                 <div className="flex items-center gap-2 ml-2">
-                    {/* Timer Controls */}
-                    {!item.isRunning && !item.isPaused ? (
-                        // Start button
-                        <button onClick={(e) => handleStartStop(e, onStart)} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors">
-                            <Play size={16} />
-                        </button>
-                    ) : item.isRunning && !item.isPaused ? (
-                        // Running state - show pause and stop buttons
-                        <div className="flex gap-1">
-                            <button onClick={(e) => handleStartStop(e, onPause || (() => {}))} className="p-2 rounded-full bg-yellow-500 text-white hover:bg-yellow-600 transition-colors">
-                                <Pause size={16} />
-                            </button>
-                            <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors animate-pulse">
-                                <Square size={16} />
-                            </button>
-                        </div>
-                    ) : item.isPaused ? (
-                        // Paused state - show resume and stop buttons
-                        <div className="flex gap-1">
-                            <button onClick={(e) => handleStartStop(e, onResume || (() => {}))} className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors">
-                                <Play size={16} />
-                            </button>
-                            <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors">
-                                <Square size={16} />
-                            </button>
-                        </div>
-                    ) : null}
+                    {/* Timer Controls - only for timed tasks */}
+                    {!item.isTimeless && (
+                        <>
+                            {!item.isRunning && !item.isPaused ? (
+                                // Start button
+                                <button onClick={(e) => handleStartStop(e, onStart)} className="p-2 rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors">
+                                    <Play size={16} />
+                                </button>
+                            ) : item.isRunning && !item.isPaused ? (
+                                // Running state - show pause and stop buttons
+                                <div className="flex gap-1">
+                                    <button onClick={(e) => handleStartStop(e, onPause || (() => {}))} className="p-2 rounded-full bg-yellow-500 text-white hover:bg-yellow-600 transition-colors">
+                                        <Pause size={16} />
+                                    </button>
+                                    <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors animate-pulse">
+                                        <Square size={16} />
+                                    </button>
+                                </div>
+                            ) : item.isPaused ? (
+                                // Paused state - show resume and stop buttons
+                                <div className="flex gap-1">
+                                    <button onClick={(e) => handleStartStop(e, onResume || (() => {}))} className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors">
+                                        <Play size={16} />
+                                    </button>
+                                    <button onClick={(e) => handleStartStop(e, onStop)} className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors">
+                                        <Square size={16} />
+                                    </button>
+                                </div>
+                            ) : null}
+                        </>
+                    )}
                     
                     {/* Subtask toggle */}
                     {subtasks.length > 0 && (

@@ -9,8 +9,21 @@ export interface SubTask {
 export interface ScheduleItem {
   _id?: Id<"scheduleItems">; // Convex ID for the item
   title: string;
-  start: string;
-  end: string;
+  start?: string; // Optional for non-timed tasks
+  end?: string;   // Optional for non-timed tasks
+  
+  // Flexible scheduling properties
+  isFlexible?: boolean; // If true, task can be scheduled flexibly
+  isTimeless?: boolean; // If true, task has no specific time (just a todo)
+  duration?: number; // Duration in minutes for flexible tasks
+  preferredTimeSlots?: string[]; // Preferred time slots like ['morning', 'afternoon', 'evening']
+  earliestStart?: string; // Earliest possible start time for flexible tasks
+  latestEnd?: string; // Latest possible end time for flexible tasks
+  
+  // Suggested times for flexible tasks (computed)
+  suggestedStart?: string; // AI-suggested start time for flexible tasks
+  suggestedEnd?: string; // AI-suggested end time for flexible tasks
+  
   remainingDuration?: number;
   isRunning?: boolean;
   isPaused?: boolean;

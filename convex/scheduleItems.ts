@@ -43,9 +43,18 @@ export const createScheduleItem = mutation({
   args: {
     userId: v.string(),
     title: v.string(),
-    start: v.string(),
-    end: v.string(),
+    start: v.optional(v.string()), // Optional for non-timed tasks
+    end: v.optional(v.string()),   // Optional for non-timed tasks
     date: v.string(),
+    
+    // Flexible scheduling properties
+    isFlexible: v.optional(v.boolean()),
+    isTimeless: v.optional(v.boolean()), // New property for non-timed tasks
+    duration: v.optional(v.number()),
+    preferredTimeSlots: v.optional(v.array(v.string())),
+    earliestStart: v.optional(v.string()),
+    latestEnd: v.optional(v.string()),
+    
     remainingDuration: v.optional(v.number()),
     isRunning: v.optional(v.boolean()),
     isPaused: v.optional(v.boolean()),
@@ -64,6 +73,15 @@ export const createScheduleItem = mutation({
       start: args.start,
       end: args.end,
       date: args.date,
+      
+      // Flexible scheduling properties
+      isFlexible: args.isFlexible,
+      isTimeless: args.isTimeless,
+      duration: args.duration,
+      preferredTimeSlots: args.preferredTimeSlots,
+      earliestStart: args.earliestStart,
+      latestEnd: args.latestEnd,
+      
       remainingDuration: args.remainingDuration,
       isRunning: args.isRunning,
       isPaused: args.isPaused,
@@ -88,6 +106,15 @@ export const updateScheduleItem = mutation({
     title: v.optional(v.string()),
     start: v.optional(v.string()),
     end: v.optional(v.string()),
+    
+    // Flexible scheduling properties
+    isFlexible: v.optional(v.boolean()),
+    isTimeless: v.optional(v.boolean()),
+    duration: v.optional(v.number()),
+    preferredTimeSlots: v.optional(v.array(v.string())),
+    earliestStart: v.optional(v.string()),
+    latestEnd: v.optional(v.string()),
+    
     remainingDuration: v.optional(v.number()),
     isRunning: v.optional(v.boolean()),
     isPaused: v.optional(v.boolean()),
@@ -135,8 +162,17 @@ export const setScheduleItems = mutation({
     date: v.string(),
     items: v.array(v.object({
       title: v.string(),
-      start: v.string(),
-      end: v.string(),
+      start: v.optional(v.string()),
+      end: v.optional(v.string()),
+      
+      // Flexible scheduling properties
+      isFlexible: v.optional(v.boolean()),
+      isTimeless: v.optional(v.boolean()),
+      duration: v.optional(v.number()),
+      preferredTimeSlots: v.optional(v.array(v.string())),
+      earliestStart: v.optional(v.string()),
+      latestEnd: v.optional(v.string()),
+      
       remainingDuration: v.optional(v.number()),
       isRunning: v.optional(v.boolean()),
       isPaused: v.optional(v.boolean()),

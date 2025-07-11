@@ -30,7 +30,17 @@ interface ScheduleListProps {
 }
 
 // Default empty block template for new schedule items
-const emptyBlock: ScheduleItemType = { title: '', start: '', end: '' };
+const emptyBlock: ScheduleItemType = { 
+    title: '', 
+    start: '', 
+    end: '', 
+    isFlexible: false,
+    isTimeless: false,
+    duration: 60,
+    preferredTimeSlots: ['anytime'],
+    earliestStart: '06:00',
+    latestEnd: '23:00'
+};
 
 // Available icon options for schedule items
 const ICON_OPTIONS = [
@@ -277,19 +287,70 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     const handleSave = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         
-        // Validate required fields
-        if (!form.title || !form.start || !form.end) {
-            alert('Please fill in all required fields');
+        // Validate required fields based on task type
+        if (!form.title) {
+            alert('Please enter a task title');
             return;
         }
 
-        // Validate time format and logic
-        if (form.start >= form.end) {
-            alert('Start time must be before end time');
-            return;
+        if (form.isTimeless) {
+            // Timeless tasks don't need time validation
+            // Clear any time-related fields
+            form.start = undefined;
+            form.end = undefined;
+            form.duration = undefined;
+            form.remainingDuration = undefined;
+        } else if (form.isFlexible) {
+            // Validate flexible task fields
+            if (!form.duration || form.duration <= 0) {
+                alert('Please enter a valid duration');
+                return;
+            }
+
+            // Calculate start and end times for flexible tasks
+            const now = new Date();
+            const currentHour = now.getHours().toString().padStart(2, '0');
+            const currentMinute = now.getMinutes().toString().padStart(2, '0');
+            const startTime = `${currentHour}:${currentMinute}`;
+            
+            // Calculate end time based on duration
+            const startMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
+            const endMinutes = startMinutes + form.duration;
+            const endHour = Math.floor(endMinutes / 60).toString().padStart(2, '0');
+            const endMin = (endMinutes % 60).toString().padStart(2, '0');
+            const endTime = `${endHour}:${endMin}`;
+            
+            // Update form with calculated times
+            form.start = startTime;
+            form.end = endTime;
+            form.remainingDuration = form.duration * 60; // Convert to seconds
+        } else {
+            // Validate fixed time fields
+            if (!form.start || !form.end) {
+                alert('Please fill in start and end times');
+                return;
+            }
+
+            // Validate time format and logic
+            if (form.start >= form.end) {
+                alert('Start time must be before end time');
+                return;
+            }
+
+            // Calculate duration for fixed tasks
+            const [startHour, startMin] = form.start.split(':').map(Number);
+            const [endHour, endMin] = form.end.split(':').map(Number);
+            const startMinutes = startHour * 60 + startMin;
+            const endMinutes = endHour * 60 + endMin;
+            const durationMinutes = endMinutes - startMinutes;
+            
+            if (durationMinutes > 0) {
+                form.duration = durationMinutes;
+                form.remainingDuration = durationMinutes * 60; // Convert to seconds
+            }
         }
 
-        console.log('🔄 Saving schedule item...');
+        console.log('🔄 Saving schedule item...', form);
         
         try {
             if (editingIndex !== null) {
@@ -338,18 +399,48 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
         setLoadingGemini(true);
         
         try {
-            const generatedSchedule = await generateScheduleWithGemini(
-                `Create a single schedule item based on this description: "${geminiPrompt}". 
-                Return only one task in the JSON array format with title, start time, and end time.
-                Make sure the times are realistic and in HH:MM format.
-                Example format: [{"title": "Study Math", "start": "09:00", "end": "10:30"}]`
-            );
+            const generatedSchedule = await generateScheduleWithGemini(geminiPrompt);
             
             console.log('✅ Task generated successfully:', generatedSchedule);
             
             // Take only the first item if multiple were generated
             const taskToAdd = generatedSchedule[0];
             if (taskToAdd) {
+                // If it's a flexible task without specific times, use suggested times or calculate duration
+                if (taskToAdd.isFlexible && !taskToAdd.start && !taskToAdd.end) {
+                    // Use suggested times if available
+                    if (taskToAdd.suggestedStart && taskToAdd.suggestedEnd) {
+                        taskToAdd.start = taskToAdd.suggestedStart;
+                        taskToAdd.end = taskToAdd.suggestedEnd;
+                    } else if (taskToAdd.duration) {
+                        // Calculate end time based on duration (fallback to current time + duration)
+                        const now = new Date();
+                        const currentHour = now.getHours().toString().padStart(2, '0');
+                        const currentMinute = now.getMinutes().toString().padStart(2, '0');
+                        const startTime = `${currentHour}:${currentMinute}`;
+                        
+                        // Calculate end time
+                        const startMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
+                        const endMinutes = startMinutes + taskToAdd.duration;
+                        const endHour = Math.floor(endMinutes / 60).toString().padStart(2, '0');
+                        const endMin = (endMinutes % 60).toString().padStart(2, '0');
+                        const endTime = `${endHour}:${endMin}`;
+                        
+                        taskToAdd.start = startTime;
+                        taskToAdd.end = endTime;
+                        taskToAdd.remainingDuration = taskToAdd.duration * 60; // Convert to seconds
+                    }
+                }
+                
+                // For timeless tasks, don't set start/end times
+                if (taskToAdd.isTimeless) {
+                    // Remove any time-related properties
+                    delete taskToAdd.start;
+                    delete taskToAdd.end;
+                    delete taskToAdd.duration;
+                    delete taskToAdd.remainingDuration;
+                }
+                
                 await addScheduleItem(taskToAdd);
             }
             
@@ -376,21 +467,38 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
         setLoadingGemini(true);
         
         try {
-            const generatedSchedule = await generateScheduleWithGemini(
-                `Based on this description: "${geminiPrompt}", create a single task with title, start time, and end time.
-                Return only one task in JSON array format with realistic times in HH:MM format.
-                Example: [{"title": "Study Math", "start": "09:00", "end": "10:30"}]`
-            );
+            const generatedSchedule = await generateScheduleWithGemini(geminiPrompt);
             
             const aiTask = generatedSchedule[0];
             if (aiTask) {
                 // Fill the form with AI-generated data
-                setForm({
+                const updatedForm = {
                     ...form,
                     title: aiTask.title || form.title,
-                    start: aiTask.start || form.start,
-                    end: aiTask.end || form.end
-                });
+                    isFlexible: aiTask.isFlexible || form.isFlexible,
+                    isTimeless: aiTask.isTimeless || form.isTimeless,
+                    duration: aiTask.duration || form.duration,
+                    preferredTimeSlots: aiTask.preferredTimeSlots || form.preferredTimeSlots,
+                    earliestStart: aiTask.earliestStart || form.earliestStart,
+                    latestEnd: aiTask.latestEnd || form.latestEnd
+                };
+
+                // Handle start/end times based on task type
+                if (aiTask.isTimeless) {
+                    // Timeless tasks don't have start/end times
+                    updatedForm.start = '';
+                    updatedForm.end = '';
+                } else if (aiTask.isFlexible && !aiTask.start && !aiTask.end) {
+                    // Flexible tasks without specific times
+                    updatedForm.start = form.start;
+                    updatedForm.end = form.end;
+                } else {
+                    // Use provided times for fixed tasks
+                    updatedForm.start = aiTask.start || form.start;
+                    updatedForm.end = aiTask.end || form.end;
+                }
+
+                setForm(updatedForm);
             }
             
             // Reset Gemini state
@@ -463,35 +571,150 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Start Time *
+                {/* Scheduling Type Toggle */}
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Task Type
+                    </label>
+                    <div className="flex gap-4">
+                        <label className="flex items-center">
+                            <input
+                                type="radio"
+                                name="schedulingType"
+                                value="fixed"
+                                checked={!form.isFlexible && !form.isTimeless}
+                                onChange={() => setForm({ ...form, isFlexible: false, isTimeless: false })}
+                                className="mr-2"
+                            />
+                            Fixed Time
                         </label>
-                        <input
-                            type="time"
-                            name="start"
-                            value={form.start}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            End Time *
+                        <label className="flex items-center">
+                            <input
+                                type="radio"
+                                name="schedulingType"
+                                value="flexible"
+                                checked={form.isFlexible && !form.isTimeless}
+                                onChange={() => setForm({ ...form, isFlexible: true, isTimeless: false })}
+                                className="mr-2"
+                            />
+                            Duration-based
                         </label>
-                        <input
-                            type="time"
-                            name="end"
-                            value={form.end}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
-                            required
-                        />
+                        <label className="flex items-center">
+                            <input
+                                type="radio"
+                                name="schedulingType"
+                                value="timeless"
+                                checked={form.isTimeless}
+                                onChange={() => setForm({ ...form, isFlexible: false, isTimeless: true })}
+                                className="mr-2"
+                            />
+                            No Time
+                        </label>
                     </div>
                 </div>
+
+                {/* Conditional Fields Based on Task Type */}
+                {form.isTimeless ? (
+                    // Timeless tasks need no time fields
+                    <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                        This task will appear as a simple todo without specific timing.
+                    </div>
+                ) : form.isFlexible ? (
+                    // Duration-based fields
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Duration (minutes) *
+                            </label>
+                            <input
+                                type="number"
+                                name="duration"
+                                value={form.duration || ''}
+                                onChange={(e) => setForm({ ...form, duration: parseInt(e.target.value) || 0 })}
+                                placeholder="e.g., 60 for 1 hour"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                                required
+                                min="1"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Preferred Time
+                            </label>
+                            <select
+                                name="preferredTimeSlot"
+                                value={form.preferredTimeSlots?.[0] || 'anytime'}
+                                onChange={(e) => setForm({ ...form, preferredTimeSlots: [e.target.value] })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="anytime">Anytime</option>
+                                <option value="morning">Morning (6AM - 12PM)</option>
+                                <option value="afternoon">Afternoon (12PM - 6PM)</option>
+                                <option value="evening">Evening (6PM - 11PM)</option>
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Earliest Start
+                                </label>
+                                <input
+                                    type="time"
+                                    name="earliestStart"
+                                    value={form.earliestStart || '06:00'}
+                                    onChange={(e) => setForm({ ...form, earliestStart: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Latest End
+                                </label>
+                                <input
+                                    type="time"
+                                    name="latestEnd"
+                                    value={form.latestEnd || '23:00'}
+                                    onChange={(e) => setForm({ ...form, latestEnd: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    // Fixed time fields
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Start Time *
+                            </label>
+                            <input
+                                type="time"
+                                name="start"
+                                value={form.start}
+                                onChange={handleInputChange}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                End Time *
+                            </label>
+                            <input
+                                type="time"
+                                name="end"
+                                value={form.end}
+                                onChange={handleInputChange}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                                required
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {/* Icon and Color selection */}
                 <div className="grid grid-cols-2 gap-4">

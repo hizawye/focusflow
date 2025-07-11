@@ -5,8 +5,17 @@ export default defineSchema({
   scheduleItems: defineTable({
     userId: v.string(), // This will be the Clerk user ID
     title: v.string(),
-    start: v.string(),
-    end: v.string(),
+    start: v.optional(v.string()), // Optional for non-timed tasks
+    end: v.optional(v.string()),   // Optional for non-timed tasks
+    
+    // Flexible scheduling properties
+    isFlexible: v.optional(v.boolean()), // If true, task can be scheduled flexibly
+    isTimeless: v.optional(v.boolean()), // If true, task has no specific time (just a todo)
+    duration: v.optional(v.number()), // Duration in minutes for flexible tasks
+    preferredTimeSlots: v.optional(v.array(v.string())), // Preferred time slots like ['morning', 'afternoon', 'evening']
+    earliestStart: v.optional(v.string()), // Earliest possible start time for flexible tasks
+    latestEnd: v.optional(v.string()), // Latest possible end time for flexible tasks
+    
     remainingDuration: v.optional(v.number()),
     isRunning: v.optional(v.boolean()),
     isPaused: v.optional(v.boolean()),
