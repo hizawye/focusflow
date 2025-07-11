@@ -22,10 +22,12 @@ export const TaskDetailsPanel: React.FC<RightTaskDetailsProps> = ({ task, onDele
     check: <span role="img" aria-label="General">✅</span>,
   };
 
-  // Sync form state with task prop when task changes
+  // Sync form state with task prop when task changes (but not while editing)
   useEffect(() => {
-    setForm(task);
-  }, [task]);
+    if (!editing) {
+      setForm(task);
+    }
+  }, [task, editing]);
 
   // Handle field changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {

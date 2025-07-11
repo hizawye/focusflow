@@ -49,7 +49,7 @@ export function TaskDetailsSidebar({
       {selectedTask ? (
         <TaskDetailsPanel
             task={selectedTask}
-            onDelete={() => handleDeleteTask(selectedTask.title)}
+            onDelete={() => handleDeleteTask(selectedTask)}
             onUpdate={handleUpdateTask}
             onClose={() => setSelectedTaskIdx(null)}
             hideClose={true}
