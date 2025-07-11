@@ -1,9 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-
-// Mock user ID for now - replace with actual user ID from authentication
-const MOCK_USER_ID = "user_123";
 
 /**
  * FocusFlow Timer Management Hook
@@ -15,11 +13,13 @@ const MOCK_USER_ID = "user_123";
  * @returns Object containing timer state and control functions
  */
 export const useTimerFromConvex = (date: string) => {
+  const { user } = useUser();
+  const userId = user?.id;
+
   // Query to get currently running timer
-  const runningTimer = useQuery(api.scheduleItems.getRunningTimer, {
-    userId: MOCK_USER_ID,
-    date,
-  });
+  const runningTimer = useQuery(api.scheduleItems.getRunningTimer, 
+    userId ? { userId, date } : "skip"
+  );
 
   // Timer mutation hooks
   const startTimerMutation = useMutation(api.scheduleItems.startTimer);
@@ -35,11 +35,15 @@ export const useTimerFromConvex = (date: string) => {
    * @returns Promise that resolves when timer is started
    */
   const startTimer = async (id: Id<"scheduleItems">) => {
+    if (!userId) {
+      throw new Error("User must be authenticated to start timer");
+    }
+    
     console.log('🟢 Starting timer for schedule item:', id);
     try {
       const result = await startTimerMutation({
         id,
-        userId: MOCK_USER_ID,
+        userId: userId,
         date,
       });
       console.log('✅ Timer started successfully with result:', result);

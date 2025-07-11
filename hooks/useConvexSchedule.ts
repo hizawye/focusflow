@@ -1,11 +1,9 @@
 import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { ScheduleItem } from "../types";
 import { DEFAULT_SCHEDULE } from "../constants";
-
-// Mock user ID for now - replace with actual user ID from authentication
-const MOCK_USER_ID = "user_123";
 
 /**
  * FocusFlow Convex Schedule Hook
@@ -17,11 +15,13 @@ const MOCK_USER_ID = "user_123";
  * @returns Object containing schedule data and mutation functions
  */
 export const useScheduleFromConvex = (date: string) => {
+  const { user } = useUser();
+  const userId = user?.id;
+
   // Query to fetch schedule items from Convex
-  const scheduleItems = useQuery(api.scheduleItems.getScheduleItems, {
-    userId: MOCK_USER_ID,
-    date,
-  });
+  const scheduleItems = useQuery(api.scheduleItems.getScheduleItems, 
+    userId ? { userId, date } : "skip"
+  );
 
   // Mutation hooks for schedule operations
   const createScheduleItem = useMutation(api.scheduleItems.createScheduleItem);
@@ -35,10 +35,14 @@ export const useScheduleFromConvex = (date: string) => {
    * @returns Promise that resolves to the created item's ID
    */
   const addScheduleItem = async (item: Omit<ScheduleItem, '_id'>) => {
+    if (!userId) {
+      throw new Error("User must be authenticated to add schedule items");
+    }
+    
     console.log('🔄 Adding schedule item:', item.title);
     try {
       const result = await createScheduleItem({
-        userId: MOCK_USER_ID,
+        userId: userId,
         date,
         title: item.title,
         start: item.start,
@@ -103,10 +107,14 @@ export const useScheduleFromConvex = (date: string) => {
    * @returns Promise that resolves when all items are set
    */
   const setAllItems = async (items: Omit<ScheduleItem, '_id'>[]) => {
+    if (!userId) {
+      throw new Error("User must be authenticated to set schedule items");
+    }
+    
     console.log('🔄 Setting all schedule items:', items.length, 'items');
     try {
       const result = await setScheduleItems({
-        userId: MOCK_USER_ID,
+        userId: userId,
         date,
         items: items.map(item => ({
           title: item.title,
@@ -261,10 +269,12 @@ export const useScheduleFromConvex = (date: string) => {
  * @returns Object containing completion status and mutation functions
  */
 export const useCompletionStatusFromConvex = (date: string) => {
-  const completionStatus = useQuery(api.completionStatus.getCompletionStatus, {
-    userId: MOCK_USER_ID,
-    date,
-  });
+  const { user } = useUser();
+  const userId = user?.id;
+
+  const completionStatus = useQuery(api.completionStatus.getCompletionStatus, 
+    userId ? { userId, date } : "skip"
+  );
 
   const setCompletionStatus = useMutation(api.completionStatus.setCompletionStatus);
   const toggleCompletionStatus = useMutation(api.completionStatus.toggleCompletionStatus);
@@ -276,10 +286,14 @@ export const useCompletionStatusFromConvex = (date: string) => {
    * @returns Promise that resolves when status is set
    */
   const setStatus = async (scheduleItemId: Id<"scheduleItems">, completed: boolean) => {
+    if (!userId) {
+      throw new Error("User must be authenticated to set completion status");
+    }
+    
     console.log('🔄 Setting completion status:', scheduleItemId, completed);
     try {
       const result = await setCompletionStatus({
-        userId: MOCK_USER_ID,
+        userId: userId,
         scheduleItemId,
         completed,
         date,
@@ -298,10 +312,14 @@ export const useCompletionStatusFromConvex = (date: string) => {
    * @returns Promise that resolves when status is toggled
    */
   const toggleStatus = async (scheduleItemId: Id<"scheduleItems">) => {
+    if (!userId) {
+      throw new Error("User must be authenticated to toggle completion status");
+    }
+    
     console.log('🔄 Toggling completion status:', scheduleItemId);
     try {
       const result = await toggleCompletionStatus({
-        userId: MOCK_USER_ID,
+        userId: userId,
         scheduleItemId,
         date,
       });
