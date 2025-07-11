@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
   scheduleItems: defineTable({
-    userId: v.string(),
+    userId: v.string(), // This will be the Clerk user ID
     title: v.string(),
     start: v.string(),
     end: v.string(),
@@ -30,7 +30,7 @@ export default defineSchema({
   }).index("by_schedule_item", ["scheduleItemId"]),
 
   completionStatus: defineTable({
-    userId: v.string(),
+    userId: v.string(), // This will be the Clerk user ID
     scheduleItemId: v.id("scheduleItems"),
     completed: v.boolean(),
     date: v.string(), // ISO date string
