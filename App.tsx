@@ -3,6 +3,7 @@ import { View } from './types.ts';
 import { useScheduleFromConvex, useCompletionStatusFromConvex } from './hooks/useConvexSchedule.ts';
 import { useTimerFromConvex } from './hooks/useTimerFromConvex.ts';
 import { Id } from './convex/_generated/dataModel.ts';
+import { useUser } from '@clerk/clerk-react';
 
 import { Header } from './components/Header';
 import { PieChart } from 'lucide-react';
@@ -13,8 +14,10 @@ import { MobileNavBar } from './components/MobileNavBar';
 import { ScheduleList } from './components/ScheduleList';
 import { SettingsPage } from './components/SettingsPage';
 import { StatsPage } from './components/StatsPage';
+import { AuthGuard, UnauthenticatedState } from './components/AuthComponents';
 
 export default function App() {
+    const { isLoaded, user } = useUser();
     const rightPaneRef = useRef<HTMLDivElement | null>(null);
     const scheduleEditorRef = useRef<any>(null);
 
@@ -34,7 +37,9 @@ export default function App() {
         scheduleItems: schedule, 
         exportSchedule, 
         importSchedule, 
-        clearSchedule 
+        clearSchedule, 
+        updateItem, 
+        deleteItem 
     } = useScheduleFromConvex(today);
     const { completionStatus } = useCompletionStatusFromConvex(today);
     
@@ -299,6 +304,27 @@ export default function App() {
         }
     };
 
+    // --- Handlers for TaskDetailsSidebar ---
+    const handleDeleteTask = async (task: typeof selectedTask) => {
+        if (task && task._id) {
+            try {
+                await deleteItem(task._id);
+                setSelectedTaskIdx(null);
+            } catch (e) {
+                alert('Failed to delete task.');
+            }
+        }
+    };
+    const handleUpdateTask = async (updated: typeof selectedTask) => {
+        if (updated && updated._id) {
+            try {
+                await updateItem(updated._id, updated);
+            } catch (e) {
+                alert('Failed to update task.');
+            }
+        }
+    };
+
     // --- Right pane stats ---
     const totalTasks = schedule ? schedule.length : 0;
     const completedTasks = completionStatus ? Object.values(completionStatus).filter(Boolean).length : 0;
@@ -482,21 +508,41 @@ export default function App() {
         }
     }, [isDarkMode]);
 
+    // Show loading state while Clerk is loading
+    if (!isLoaded) {
+        return (
+            <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+                <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                        <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="fixed inset-0 min-h-screen min-w-full font-sans antialiased text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
-            {/* Mobile Task Details Modal */}
-            <TaskModal
-                selectedTask={selectedTask}
-                setSelectedTaskIdx={setSelectedTaskIdx}
-                selectedTaskIdx={selectedTaskIdx}
-            />
-            {/* Responsive layout: sidebar (desktop), header, main, right pane */}
-            <div className={`w-full max-w-[1800px] mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: '100vh'}}>
-                {/* App header */}
-                <Header />
-                <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
-                    {/* Sidebar navigation (desktop) */}
-                    <DesktopNavBar view={view} setView={setView} NavItem={NavItem} />
+            {/* App header - always visible */}
+            <Header />
+            
+            {/* Show unauthenticated state or authenticated content */}
+            {!user ? (
+                <UnauthenticatedState />
+            ) : (
+                <AuthGuard>
+                    {/* Mobile Task Details Modal */}
+                    <TaskModal
+                        selectedTask={selectedTask}
+                        setSelectedTaskIdx={setSelectedTaskIdx}
+                        selectedTaskIdx={selectedTaskIdx}
+                    />
+                    {/* Responsive layout: sidebar (desktop), header, main, right pane */}
+                    <div className={`w-full max-w-[1800px] mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: 'calc(100vh - 80px)'}}>
+                        <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
+                            {/* Sidebar navigation (desktop) */}
+                            <DesktopNavBar view={view} setView={setView} NavItem={NavItem} />
                     {/* Main content: schedule, stats, or settings */}
                     <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0 no-scrollbar">
                         {renderView()}
@@ -512,12 +558,16 @@ export default function App() {
                         selectedTaskIdx={selectedTaskIdx}
                         handleSidebarAdd={handleSidebarAdd}
                         handleGeminiAdd={handleGeminiAdd}
+                        handleDeleteTask={handleDeleteTask}
+                        handleUpdateTask={handleUpdateTask}
                     />
                 </div>
-                {/* Bottom nav (mobile) */}
-                <MobileNavBar view={view} setView={setView} NavItem={NavItem} />
-                <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
-            </div>
+                        {/* Bottom nav (mobile) */}
+                        <MobileNavBar view={view} setView={setView} NavItem={NavItem} />
+                        <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
+                    </div>
+                </AuthGuard>
+            )}
         </div>
     );
 }
