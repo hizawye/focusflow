@@ -5,40 +5,36 @@ const GEMINI_API_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // System prompt for better, faster responses
-const SYSTEM_PROMPT = `You are a productivity assistant that creates schedule items with flexible scheduling support.
+const SYSTEM_PROMPT = `You are "FocusFlow AI", a concise productivity assistant.
 
-CRITICAL RULES:
-1. ALWAYS return ONLY valid JSON array format - no explanations, no markdown, no extra text
-2. Support three types of tasks:
-   - FIXED: specific start/end times like "09:00" to "10:30"
-   - FLEXIBLE: duration-based tasks that can be scheduled anytime (e.g., "1 hour workout")
-   - TIMELESS: tasks without specific times or duration (e.g., "write report", "call mom")
-3. Use 24-hour format for times (HH:MM) when applicable
-4. Title should be concise and actionable
-5. Consider typical daily schedules (work hours, breaks, meals)
+YOUR SOLE OUTPUT MUST BE **ONE** valid JSON array (UTF-8 text) – no markdown, no comments, no additional keys.  If you are unsure, output an empty JSON array [].
 
-RESPONSE FORMAT for FIXED tasks:
-[{"title": "Task Name", "start": "HH:MM", "end": "HH:MM"}]
+SUPPORTED TASK SHAPES (only these keys allowed):
+1. FIXED  → {"title","start","end"}
+2. FLEXIBLE → {"title","isFlexible":true,"duration", "preferredTimeSlots" (array of "morning"|"afternoon"|"evening"), "earliestStart","latestEnd"}
+3. TIMELESS → {"title","isTimeless":true}
 
-RESPONSE FORMAT for FLEXIBLE tasks:
-[{"title": "Task Name", "isFlexible": true, "duration": 60, "preferredTimeSlots": ["morning"], "earliestStart": "07:00", "latestEnd": "22:00"}]
-
-RESPONSE FORMAT for TIMELESS tasks:
-[{"title": "Task Name", "isTimeless": true}]
-
-TASK TYPE DETECTION:
-- If user specifies exact times → FIXED task
-- If user mentions duration (1h, 30min, 2 hours) → FLEXIBLE task  
-- If user mentions just an action without time → TIMELESS task
+CONSTRAINTS:
+• Times in 24h HH:MM (zero-padded).  Start < End.
+• duration is minutes (integer 15 – 240).
+• Title < 38 characters, action-oriented verb.
+• NO overlapping times when multiple FIXED tasks are requested in same call.
+• Prefer user’s chrono-logic: morning slots before 12:00, afternoon 12-17, evening 17-22.
+• If user gives specific words like "flexible" or "anytime" → choose FLEXIBLE.
+• If user gives an exact time or range → choose FIXED.
+• Otherwise default to TIMELESS.
 
 EXAMPLES:
-- "study math from 9 to 10:30" → [{"title": "Study Mathematics", "start": "09:00", "end": "10:30"}]
-- "1 hour workout" → [{"title": "Workout Session", "isFlexible": true, "duration": 60, "preferredTimeSlots": ["morning"], "earliestStart": "06:00", "latestEnd": "21:00"}]
-- "call mom" → [{"title": "Call Mom", "isTimeless": true}]
-- "write report" → [{"title": "Write Report", "isTimeless": true}]
-- "buy groceries" → [{"title": "Buy Groceries", "isTimeless": true}]
+Input: "Study math from 9-10"
+Output: [{"title":"Study Mathematics","start":"09:00","end":"10:00"}]
 
-Be fast and direct. No explanations needed.`;
+Input: "1h workout"
+Output: [{"title":"Workout","isFlexible":true,"duration":60,"preferredTimeSlots":["morning"],"earliestStart":"06:00","latestEnd":"20:00"}]
+
+Input: "Call mom"
+Output: [{"title":"Call Mom","isTimeless":true}]
+
+Respond quickly and follow the JSON schema exactly.`;
 
 // Generate multiple schedule items for a full daily schedule
 export async function generateDailyScheduleWithGemini(userPrompt: string): Promise<ScheduleItem[]> {
@@ -146,7 +142,7 @@ RESPONSE:`;
   // Try to extract JSON from the reply
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const json = extractJsonFromReply(text);
-  return JSON.parse(json);
+  return sanitizeTasks(JSON.parse(json));
 }
 
 // Generate schedule items with context awareness of existing schedule
@@ -464,4 +460,43 @@ function extractJsonFromReply(reply: string): string {
     error.cleanedReply = cleanReply;
     throw error;
   }
+}
+
+// Validate and sanitize raw objects coming from Gemini
+function sanitizeTasks(raw: any[]): ScheduleItem[] {
+  const isTime = (t: any) => typeof t === 'string' && /^\d{2}:\d{2}$/.test(t);
+
+  const clean: ScheduleItem[] = [];
+  for (const obj of raw) {
+    if (!obj || typeof obj !== 'object') continue;
+    const base: Partial<ScheduleItem> = {
+      title: typeof obj.title === 'string' ? obj.title.slice(0, 38) : 'Untitled'
+    };
+
+    if (obj.isTimeless) {
+      clean.push({ ...base, isTimeless: true } as ScheduleItem);
+      continue;
+    }
+
+    if (obj.isFlexible) {
+      const duration = Number(obj.duration);
+      if (Number.isFinite(duration) && duration > 0 && duration <= 240) {
+        clean.push({
+          ...base,
+          isFlexible: true,
+          duration,
+          preferredTimeSlots: Array.isArray(obj.preferredTimeSlots) ? obj.preferredTimeSlots.slice(0, 3) : ['anytime'],
+          earliestStart: isTime(obj.earliestStart) ? obj.earliestStart : '06:00',
+          latestEnd: isTime(obj.latestEnd) ? obj.latestEnd : '22:00'
+        } as ScheduleItem);
+      }
+      continue;
+    }
+
+    // Assume FIXED if start/end present
+    if (isTime(obj.start) && isTime(obj.end)) {
+      clean.push({ ...base, start: obj.start, end: obj.end } as ScheduleItem);
+    }
+  }
+  return clean;
 }

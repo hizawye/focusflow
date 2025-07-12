@@ -4,6 +4,10 @@ import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { ScheduleItem } from "../types";
 import { DEFAULT_SCHEDULE } from "../constants";
+import { useState, useEffect } from "react";
+
+// Helper to build unique localStorage key per user+date
+const cacheKey = (userId: string, date: string) => `focusflow_schedule_${userId}_${date}`;
 
 /**
  * FocusFlow Convex Schedule Hook
@@ -17,6 +21,23 @@ import { DEFAULT_SCHEDULE } from "../constants";
 export const useScheduleFromConvex = (date: string) => {
   const { user } = useUser();
   const userId = user?.id;
+
+  // --- Local cache state ---
+  const [cache, setCache] = useState<ScheduleItem[] | null>(null);
+
+  // Load cache on mount
+  useEffect(() => {
+    if (!userId) return;
+    const raw = localStorage.getItem(cacheKey(userId, date));
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.items)) {
+          setCache(parsed.items);
+        }
+      } catch {/* ignore */}
+    }
+  }, [userId, date]);
 
   // Query to fetch schedule items from Convex
   const scheduleItems = useQuery(api.scheduleItems.getScheduleItems, 
@@ -245,8 +266,37 @@ export const useScheduleFromConvex = (date: string) => {
     manualStatus: item.manualStatus,
   })) || [];
 
+  // --- Keep localStorage cache in-sync with server ---
+  // We update the cache once whenever `scheduleItems` (data from Convex)
+  // changes. Because the dependency list is **only** `scheduleItems`, we avoid
+  // triggering repeated updates caused by referential changes inside
+  // `convertedItems`.
+  useEffect(() => {
+    if (!userId) return;
+    if (scheduleItems === undefined) return; // Still loading
+
+    const latestServerTime = scheduleItems.length
+      ? Math.max(...scheduleItems.map(i => i.updatedAt))
+      : 0;
+
+    const payload = { updatedAt: latestServerTime, items: convertedItems };
+    const newStr = JSON.stringify(payload);
+    const prevStr = localStorage.getItem(cacheKey(userId, date));
+
+    if (prevStr !== newStr) {
+      localStorage.setItem(cacheKey(userId, date), newStr);
+      // Only update React state when the serialized content differs to avoid
+      // unnecessary renders (and potential update-depth loops).
+      setCache(convertedItems);
+    }
+  }, [scheduleItems, userId, date]);
+ 
+  // Prefer live server data whenever it is available (even if empty). Fallback
+  // to the cached copy only while the initial query is still loading.
+  const itemsToReturn = scheduleItems === undefined ? (cache || []) : convertedItems;
+ 
   return {
-    scheduleItems: convertedItems,
+    scheduleItems: itemsToReturn,
     addScheduleItem,
     updateItem,
     deleteItem,

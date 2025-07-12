@@ -27,6 +27,7 @@ export const useTimerFromConvex = (date: string) => {
   const pauseTimerMutation = useMutation(api.scheduleItems.pauseTimer);
   const resumeTimerMutation = useMutation(api.scheduleItems.resumeTimer);
   const updateTimerDurationMutation = useMutation(api.scheduleItems.updateTimerDuration);
+  const batchUpdateDurationsMutation = useMutation(api.scheduleItems.batchUpdateDurations);
 
   /**
    * Start a timer for a specific schedule item
@@ -117,6 +118,20 @@ export const useTimerFromConvex = (date: string) => {
     }
   };
 
+  /**
+   * Batch update remaining durations for multiple timers.
+   * @param updates - array of objects { id, remainingDuration }
+   */
+  const updateTimerDurationsBatch = async (updates: { id: Id<"scheduleItems">, remainingDuration: number }[]) => {
+    if (updates.length === 0) return;
+    try {
+      await batchUpdateDurationsMutation({ updates });
+    } catch (error) {
+      console.error('❌ Error batch updating timer durations:', error);
+      throw error;
+    }
+  };
+
   return {
     runningTimer,
     startTimer,
@@ -124,6 +139,7 @@ export const useTimerFromConvex = (date: string) => {
     pauseTimer,
     resumeTimer,
     updateTimerDuration,
+    updateTimerDurationsBatch,
     isLoading: runningTimer === undefined,
   };
 };

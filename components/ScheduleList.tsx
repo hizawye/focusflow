@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { ScheduleItem as ScheduleItemType } from '../types.ts';
+import { Id } from '../convex/_generated/dataModel.ts';
 import { ScheduleItem } from './ScheduleItem.tsx';
 import { Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateScheduleWithGemini } from '../gemini';
 import { useScheduleFromConvex } from '../hooks/useConvexSchedule';
+import { todayLocalISO } from '../src/utils/date.ts';
 
 /**
  * ScheduleList Component Props
@@ -21,13 +23,21 @@ interface ScheduleListProps {
     onSelectTask?: (idx: number) => void;       // Task selection handler
     selectedTaskIdx?: number | null;            // Currently selected task index
     onAddTask?: () => void;                     // Add task button handler
-    onStart?: (title: string) => void;          // Start timer handler
-    onStop?: (title: string) => void;           // Stop timer handler
-    onPause?: (title: string) => void;          // Pause timer handler
-    onResume?: (title: string) => void;         // Resume timer handler
-    runningTaskTitle?: string | null;           // Title of currently running task
-    timers?: {[key: string]: number};           // Timer state for each task
+    onStart?: (id: Id<"scheduleItems">) => void;          // Start timer handler
+    onStop?: (id: Id<"scheduleItems">) => void;           // Stop timer handler
+    onPause?: (id: Id<"scheduleItems">) => void;          // Pause timer handler
+    onResume?: (id: Id<"scheduleItems">) => void;         // Resume timer handler
+    runningTaskId?: Id<"scheduleItems"> | null;           // Currently running task id
+    timers?: Record<string, number>;           // Timer state for each task keyed by id
 }
+
+// Simple in-component toast helper
+const toast = (msg: string) => {
+  if (typeof window !== 'undefined') {
+    // basic browser alert fallback – could be replaced by fancy toast lib
+    window.alert(msg);
+  }
+};
 
 // Default empty block template for new schedule items
 const emptyBlock: ScheduleItemType = { 
@@ -85,7 +95,7 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     onStop,
     onPause,
     onResume,
-    runningTaskTitle,
+    runningTaskId,
     timers,
 }, ref) => {
     // ===== STATE MANAGEMENT =====
@@ -96,6 +106,45 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     const [adding, setAdding] = useState(false);
     const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
 
+    // FAB visibility based on scroll direction (mobile only)
+    const [showFab, setShowFab] = useState(true);
+    useEffect(() => {
+        let lastY = window.scrollY;
+        const onScroll = () => {
+            const y = window.scrollY;
+            if (y > lastY + 10) {
+                setShowFab(false);
+            } else if (y < lastY - 10) {
+                setShowFab(true);
+            }
+            lastY = y;
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    /** Swipe callbacks */
+    const handleSwipeDone = async (item: ScheduleItemType) => {
+        if (item._id) {
+            try {
+                await updateItem(item._id, { manualStatus: 'done' });
+                if (navigator?.vibrate) navigator.vibrate(10);
+            } catch (e) {
+                console.error('Failed to mark done via swipe', e);
+            }
+        }
+    };
+
+    const handleSwipeDelete = async (item: ScheduleItemType) => {
+        if (item._id) {
+            try {
+                await deleteItem(item._id);
+            } catch (e) {
+                console.error('Failed to delete via swipe', e);
+            }
+        }
+    };
+
     // Subtask management state
     const [subtaskInput, setSubtaskInput] = useState('');
     const [subtasks, setSubtasks] = useState(form.subtasks || []);
@@ -104,11 +153,12 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
     const [loadingGemini, setLoadingGemini] = useState(false);
     const [showGeminiInput, setShowGeminiInput] = useState(false);
     const [geminiPrompt, setGeminiPrompt] = useState('');
+    const [generatingIds, setGeneratingIds] = useState<Record<string, boolean>>({});
 
     // ===== CONVEX INTEGRATION =====
     
     // Get current date for data queries
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalISO();
     
     // Convex hooks for real-time database operations
     const { addScheduleItem, updateItem, deleteItem } = useScheduleFromConvex(today);
@@ -397,8 +447,26 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
         
         console.log('🤖 Generating task with Gemini:', geminiPrompt);
         setLoadingGemini(true);
+        // Hide the popup while processing to give instant feedback
+        setShowGeminiInput(false);
         
         try {
+            // 1. Optimistically create placeholder task
+            const placeholder: Omit<ScheduleItemType, '_id'> = {
+              title: geminiPrompt.substring(0, 40) + '…',
+              start: '',
+              end: '',
+              isFlexible: false,
+              isTimeless: true,
+              duration: 0,
+              preferredTimeSlots: ['anytime'],
+              earliestStart: '06:00',
+              latestEnd: '23:00'
+            } as any;
+            const newId = await addScheduleItem(placeholder);
+            setGeneratingIds(prev => ({ ...prev, [newId]: true }));
+
+            // 2. Ask Gemini
             const generatedSchedule = await generateScheduleWithGemini(geminiPrompt);
             
             console.log('✅ Task generated successfully:', generatedSchedule);
@@ -441,16 +509,24 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                     delete taskToAdd.remainingDuration;
                 }
                 
-                await addScheduleItem(taskToAdd);
+                // Update placeholder with real details
+                await updateItem(newId, taskToAdd as Partial<ScheduleItemType>);
             }
             
             // Reset Gemini state
             setGeminiPrompt('');
             setShowGeminiInput(false);
+            setGeneratingIds(prev => { const copy = { ...prev }; delete copy[newId]; return copy; });
             
         } catch (error) {
             console.error('❌ Error generating task:', error);
-            alert('Failed to generate task. Please try again.');
+            toast('Failed to generate task.');
+            // Remove placeholder
+            const idToDelete = Object.keys(generatingIds)[0];
+            if (idToDelete) {
+              await deleteItem(idToDelete as any);
+              setGeneratingIds(prev => { const copy = { ...prev }; delete copy[idToDelete]; return copy; });
+            }
         } finally {
             setLoadingGemini(false);
         }
@@ -886,9 +962,9 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
 
     // ===== MAIN RENDER =====
     return (
-        <div className="relative">
+        <div className="relative w-full min-w-0">
             {/* Schedule Items */}
-            <div className="space-y-3">
+            <div className="space-y-3 w-full">
                 {schedule.length === 0 && (
                     <div className="text-center text-gray-400 py-8">
                         <Plus className="mx-auto mb-2 w-10 h-10 text-primary-400" />
@@ -902,7 +978,8 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                         <div
                             key={item.title + item.start}
                             ref={el => { blockRefs.current[idx] = el; }}
-                            className={`relative group ${selectedTaskIdx === idx ? 'ring-2 ring-primary-500 ring-offset-2 z-10 bg-primary-50 dark:bg-primary-900/30' : ''}`}
+                            className={`relative group mr-4 ${selectedTaskIdx === idx ? 'ring-2 ring-primary-500 ring-offset-2 z-10 bg-primary-50 dark:bg-primary-900/30' : ''}`}
+                            style={{width: '92%'}}
                             tabIndex={0}
                             aria-selected={selectedTaskIdx === idx}
                             role="button"
@@ -981,18 +1058,20 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
                                     <ScheduleItem
                                         item={{
                                             ...item,
-                                            // Force the isRunning state from the runningTaskTitle prop
-                                            isRunning: runningTaskTitle === item.title ? true : false,
-                                            remainingDuration: timers?.[item.title] || item.remainingDuration
+                                            isRunning: runningTaskId === item._id,
+                                            remainingDuration: item._id ? timers?.[item._id as unknown as string] ?? item.remainingDuration : item.remainingDuration
                                         }}
-                                        isActive={runningTaskTitle === item.title}
+                                        isActive={runningTaskId === item._id}
                                         isCompleted={completionStatus[item.title] || false}
                                         onSubTaskToggle={(subIdx: number) => onSubTaskToggle?.(idx, subIdx)}
-                                        onStart={() => onStart?.(item.title)}
-                                        onStop={() => onStop?.(item.title)}
-                                        onPause={() => onPause?.(item.title)}
-                                        onResume={() => onResume?.(item.title)}
+                                        onStart={() => { if (item._id) onStart?.(item._id); }}
+                                        onStop={() => { if (item._id) onStop?.(item._id); }}
+                                        onPause={() => { if (item._id) onPause?.(item._id); }}
+                                        onResume={() => { if (item._id) onResume?.(item._id); }}
                                         onSelect={() => onSelectTask && editingIndex === null && !adding ? onSelectTask(idx) : undefined}
+                                        onSwipeLeft={() => handleSwipeDone(item)}
+                                        onSwipeRight={() => handleSwipeDelete(item)}
+                                        isGenerating={item._id ? !!generatingIds[item._id as unknown as string] : false}
                                     />
                                 </>
                             )}
@@ -1005,7 +1084,7 @@ export const ScheduleList = forwardRef<any, ScheduleListProps>(({
             {adding && renderForm()}
             
             {/* Action buttons */}
-            <div className="fixed bottom-20 right-4 left-auto md:hidden z-40 flex flex-col gap-4">
+            <div className={`fixed bottom-20 right-4 left-auto md:hidden z-40 flex flex-col gap-4 transition-transform duration-300 ${showFab ? 'translate-y-0 opacity-100' : 'translate-y-24 opacity-0'}`}>
                 {/* AI Button */}
                 <button
                     className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-3xl transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-indigo-300"

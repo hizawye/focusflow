@@ -3,6 +3,9 @@ import { View } from './types.ts';
 import { useScheduleFromConvex, useCompletionStatusFromConvex } from './hooks/useConvexSchedule.ts';
 import { useTimerFromConvex } from './hooks/useTimerFromConvex.ts';
 import { Id } from './convex/_generated/dataModel.ts';
+import { todayLocalISO } from './src/utils/date.ts';
+import { useMutation } from 'convex/react';
+import { api } from './convex/_generated/api';
 import { useUser } from '@clerk/clerk-react';
 
 import { Header } from './components/Header';
@@ -32,7 +35,7 @@ export default function App() {
     const [isAlarmEnabled, setIsAlarmEnabled] = useState<boolean>(true);
 
     // Convex hooks for schedule and completion status
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalISO();
     const { 
         scheduleItems: schedule, 
         exportSchedule, 
@@ -54,11 +57,17 @@ export default function App() {
         isLoading: isTimerLoading
     } = useTimerFromConvex(today);
 
+    // Batch duration update infrastructure
+    const batchUpdateDurations = useMutation(api.scheduleItems.batchUpdateDurations);
+    const pendingDurationsRef = useRef<Record<string, number>>({});
+
     // --- Sort schedule by start time for display ---
     const sortedSchedule = useMemo(() => {
         return [...(schedule || [])].sort((a, b) => {
-            const [ah, am] = a.start.split(":").map(Number);
-            const [bh, bm] = b.start.split(":").map(Number);
+            const startA = a.start ?? '23:59';
+            const startB = b.start ?? '23:59';
+            const [ah, am] = startA.split(":").map(Number);
+            const [bh, bm] = startB.split(":").map(Number);
             return ah !== bh ? ah - bh : am - bm;
         });
     }, [schedule]);
@@ -68,7 +77,7 @@ export default function App() {
     const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
 
     // Timer state management
-    const [timers, setTimers] = useState<{[key: string]: number}>({});
+    const [timers, setTimers] = useState<Record<string, number>>({});
     // Track the currently running task title for UI updates
     const [runningTaskTitle, setRunningTaskTitle] = useState<string | null>(null);
     const [runningTaskId, setRunningTaskId] = useState<Id<"scheduleItems"> | null>(null);
@@ -112,7 +121,7 @@ export default function App() {
 
     // Timer effect - runs every second for active timers
     useEffect(() => {
-        if (!runningTaskTitle || !runningTaskId) return;
+        if (!runningTaskId) return;
         
         // Check if the timer is paused by using runningTimer from Convex
         if (runningTimer?.isPaused) return;
@@ -120,41 +129,63 @@ export default function App() {
         const interval = setInterval(() => {
             setTimers(prev => {
                 const newTimers = { ...prev };
-                if (newTimers[runningTaskTitle] > 0) {
-                    newTimers[runningTaskTitle] -= 1;
+                const idKey = runningTaskId! as string;
+                if (newTimers[idKey] > 0) {
+                    newTimers[idKey] -= 1;
                     
-                    // Update Convex with new remaining time every 5 seconds
-                    if (newTimers[runningTaskTitle] % 5 === 0) {
-                        updateTimerDuration(runningTaskId, newTimers[runningTaskTitle])
-                            .catch(err => console.error('Failed to update timer duration:', err));
-                    }
+                    // Queue update locally; we'll batch-flush later
+                    pendingDurationsRef.current[idKey] = newTimers[idKey];
                 } else {
                     // Timer finished
                     stopTimer(runningTaskId)
                         .catch(err => console.error('Failed to stop timer:', err));
                     // TODO: Show completion notification
-                    console.log('⏰ Timer finished for:', runningTaskTitle);
+                    console.log('⏰ Timer finished for task id:', runningTaskId);
                 }
                 return newTimers;
             });
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [runningTaskTitle, runningTaskId, runningTimer, updateTimerDuration, stopTimer]);
+    }, [runningTaskId, runningTimer, stopTimer]);
+
+    // Flush pending duration updates every 30 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const payload = Object.entries(pendingDurationsRef.current).map(([id, remainingDuration]) => ({ id: id as unknown as Id<"scheduleItems">, remainingDuration }));
+            if (payload.length) {
+                batchUpdateDurations({ updates: payload })
+                    .catch((err: unknown) => console.error('Batch duration update failed', err));
+                pendingDurationsRef.current = {};
+            }
+        }, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Synchronize timers when tab becomes visible to avoid drift
+    useEffect(() => {
+        const syncOnVisibility = () => {
+            if (document.visibilityState === 'visible' && runningTimer && runningTimer._id) {
+                setTimers({ [runningTimer._id]: Math.floor(runningTimer.remainingDuration ?? 0) });
+            }
+        };
+        window.addEventListener('visibilitychange', syncOnVisibility);
+        return () => window.removeEventListener('visibilitychange', syncOnVisibility);
+    }, [runningTimer]);
 
     // Initialize timer durations when schedule changes
     useEffect(() => {
         if (schedule) {
-            const newTimers: {[key: string]: number} = {};
+            const newTimers: Record<string, number> = {};
             schedule.forEach(item => {
-                if (item.remainingDuration !== undefined) {
-                    newTimers[item.title] = item.remainingDuration;
-                } else {
-                    // Calculate duration from start/end times
+                if (item.remainingDuration !== undefined && item._id) {
+                    newTimers[item._id as string] = item.remainingDuration;
+                } else if (item.start && item.end) {
+                    // Calculate duration from start/end times when they exist
                     const [startH, startM] = item.start.split(':').map(Number);
                     const [endH, endM] = item.end.split(':').map(Number);
                     const durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
-                    newTimers[item.title] = durationMinutes * 60; // Convert to seconds
+                    if (item._id) newTimers[item._id as string] = Math.max(0, durationMinutes) * 60; // Convert to seconds
                 }
             });
             
@@ -170,71 +201,79 @@ export default function App() {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(schedule?.map(item => ({
-        title: item.title,
+        id: item._id,
         remainingDuration: item.remainingDuration,
         start: item.start,
         end: item.end
     })))]);
 
-    // Handle timer start/stop/pause/resume
-    const handleStartTimer = (title: string) => {
-        console.log('🟢 Starting timer for:', title);
-        const item = schedule.find(item => item.title === title);
-        
-        console.log('📌 Item found:', item ? {
-            id: item._id,
-            title: item.title,
-            isRunning: item.isRunning,
-            isPaused: item.isPaused
-        } : 'No item found');
-        
-        if (item && item._id) {
-            console.log('🔄 Calling startTimer with ID:', item._id);
-            startTimer(item._id)
-                .then(() => console.log('✅ Timer started successfully'))
-                .catch(err => console.error('❌ Failed to start timer:', err));
-        } else {
-            console.error('❌ Cannot start timer: Invalid item or missing ID');
+    // Recalculate remaining time for fixed non-running tasks every 10s
+    useEffect(() => {
+        if (!schedule || schedule.length === 0) return;
+
+        const updated: Record<string, number> = {};
+        schedule.forEach(item => {
+            if (item.isTimeless || item.isFlexible) return;
+            // Skip currently running task – its timer is already live
+            if (runningTaskId && item._id === runningTaskId) return;
+            if (!item.start || !item.end) return;
+
+            const [sH, sM] = item.start.split(":").map(Number);
+            const [eH, eM] = item.end.split(":").map(Number);
+            const startDate = new Date(now);
+            startDate.setHours(sH, sM, 0, 0);
+            const endDate = new Date(now);
+            endDate.setHours(eH, eM, 0, 0);
+
+            let remainingSec: number;
+            if (now < startDate) {
+                // Task hasn’t started yet – full duration remaining
+                remainingSec = Math.max(0, (endDate.getTime() - startDate.getTime()) / 1000);
+            } else if (now > endDate) {
+                // Task window has passed
+                remainingSec = 0;
+            } else {
+                // Currently in-progress (but timer not explicitly started)
+                remainingSec = Math.max(0, (endDate.getTime() - now.getTime()) / 1000);
+            }
+
+            if (item._id) updated[item._id as string] = Math.floor(remainingSec);
+        });
+
+        if (Object.keys(updated).length) {
+            setTimers(prev => ({ ...prev, ...updated }));
         }
+    }, [now, schedule, runningTaskId]);
+
+    // Handle timer start/stop/pause/resume
+    const handleStartTimer = (id: Id<"scheduleItems">) => {
+        console.log('🟢 Starting timer for schedule item:', id);
+        if (navigator?.vibrate) navigator.vibrate(10);
+        startTimer(id)
+            .then(() => console.log('✅ Timer started successfully'))
+            .catch(err => console.error('❌ Failed to start timer:', err));
     };
 
-    const handleStopTimer = (title: string) => {
-        console.log('🔴 Stopping timer for:', title);
-        const item = schedule.find(item => item.title === title);
-        
-        console.log('📌 Item found:', item ? {
-            id: item._id,
-            title: item.title,
-            isRunning: item.isRunning,
-            isPaused: item.isPaused
-        } : 'No item found');
-        
-        if (item && item._id) {
-            console.log('🔄 Calling stopTimer with ID:', item._id);
-            stopTimer(item._id)
+    const handleStopTimer = (id: Id<"scheduleItems">) => {
+        console.log('🔴 Stopping timer for id:', id);
+        stopTimer(id)
                 .then(() => console.log('✅ Timer stopped successfully'))
                 .catch(err => console.error('❌ Failed to stop timer:', err));
-        } else {
-            console.error('❌ Cannot stop timer: Invalid item or missing ID');
-        }
     };
     
-    const handlePauseTimer = (title: string) => {
-        console.log('⏸️ Pausing timer for:', title);
-        const item = schedule.find(item => item.title === title);
-        if (item && item._id && item.isRunning && !item.isPaused) {
-            pauseTimer(item._id)
-                .catch(err => console.error('Failed to pause timer:', err));
-        }
+    const handlePauseTimer = (id: Id<"scheduleItems">) => {
+        console.log('⏸️ Pausing timer for id:', id);
+        if (navigator?.vibrate) navigator.vibrate(10);
+        pauseTimer(id)
+                .then(() => console.log('✅ Timer paused successfully'))
+                .catch(err => console.error('❌ Failed to pause timer:', err));
     };
     
-    const handleResumeTimer = (title: string) => {
-        console.log('▶️ Resuming timer for:', title);
-        const item = schedule.find(item => item.title === title);
-        if (item && item._id && item.isRunning && item.isPaused) {
-            resumeTimer(item._id)
-                .catch(err => console.error('Failed to resume timer:', err));
-        }
+    const handleResumeTimer = (id: Id<"scheduleItems">) => {
+        console.log('▶️ Resuming timer for id:', id);
+        resumeTimer(id)
+                .then(() => console.log('✅ Timer resumed successfully'))
+                .catch(err => console.error('❌ Failed to resume timer:', err));
     };
 
     // Handle task selection - don't close panel if same task is clicked
@@ -330,6 +369,7 @@ export default function App() {
     const completedTasks = completionStatus ? Object.values(completionStatus).filter(Boolean).length : 0;
     const notCompletedTasks = totalTasks - completedTasks;
     const totalMinutes = schedule ? schedule.reduce((total, block) => {
+        if (!block.start || !block.end) return total;
         const [startH, startM] = block.start.split(':').map(Number);
         const [endH, endM] = block.end.split(':').map(Number);
         const start = startH * 60 + startM;
@@ -355,7 +395,7 @@ export default function App() {
             default:
                 return (
                     <div className="relative">
-                        <div className="flex relative">
+                        <div className="flex relative w-full">
                             {/* Timeline bar */}
                             <div className="w-6 flex flex-col items-center relative">
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 h-full w-1 bg-primary-200 dark:bg-primary-800 rounded-full z-0" style={{height: '100%'}}></div>
@@ -363,7 +403,7 @@ export default function App() {
                                 {schedule.length > 0 && (() => {
                                     const first = schedule[0];
                                     const last = schedule[schedule.length - 1];
-                                    const parse = (t: string) => { const [h, m] = t.split(':').map(Number); const d = new Date(now); d.setHours(h, m, 0, 0); return d; };
+                                    const parse = (t?: string) => { if (!t) { const d = new Date(now); return d; } const [h, m] = t.split(':').map(Number); const d = new Date(now); d.setHours(h ?? 0, m ?? 0, 0, 0); return d; };
                                     const start = parse(first.start).getTime();
                                     const end = parse(last.end).getTime();
                                     const pct = Math.min(1, Math.max(0, (now.getTime() - start) / (end - start)));
@@ -376,7 +416,7 @@ export default function App() {
                                 })()}
                             </div>
                             {/* Schedule blocks */}
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                                 <ScheduleList 
                                     ref={scheduleEditorRef}
                                     schedule={sortedSchedule} 
@@ -387,7 +427,7 @@ export default function App() {
                                     onStop={handleStopTimer}
                                     onPause={handlePauseTimer}
                                     onResume={handleResumeTimer}
-                                    runningTaskTitle={runningTaskTitle}
+                                    runningTaskId={runningTaskId}
                                     timers={timers}
                                 />
                             </div>
@@ -544,7 +584,7 @@ export default function App() {
                             {/* Sidebar navigation (desktop) */}
                             <DesktopNavBar view={view} setView={setView} NavItem={NavItem} />
                     {/* Main content: schedule, stats, or settings */}
-                    <main className="flex-1 px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0 no-scrollbar">
+                    <main className="flex-1 w-full px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0 no-scrollbar">
                         {renderView()}
                     </main>
                     {/* Right details pane (desktop only) */}

@@ -12,6 +12,9 @@ interface ScheduleItemProps {
     onPause?: () => void;
     onResume?: () => void;
     onSelect?: () => void;
+    onSwipeLeft?: () => void;
+    onSwipeRight?: () => void;
+    isGenerating?: boolean;
 }
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -22,14 +25,39 @@ const ICONS: Record<string, React.ReactNode> = {
     // Add more as needed
 };
 
-export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop, onPause, onResume, onSelect }) => {
+export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCompleted, onSubTaskToggle, onStart, onStop, onPause, onResume, onSelect, onSwipeLeft, onSwipeRight }) => {
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const [translateX, setTranslateX] = useState(0);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setTouchStartX(e.touches[0].clientX);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (touchStartX !== null) {
+            const delta = e.touches[0].clientX - touchStartX;
+            setTranslateX(delta);
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (translateX < -80 && onSwipeLeft) {
+            onSwipeLeft();
+        } else if (translateX > 80 && onSwipeRight) {
+            onSwipeRight();
+        }
+        setTranslateX(0);
+        setTouchStartX(null);
+    };
+
     const [expanded, setExpanded] = useState(false);
     const icon = item.icon && ICONS[item.icon] ? ICONS[item.icon] : ICONS['check'];
     const subtasks = item.subtasks || [];
     const completedCount = subtasks.filter(t => t.completed).length;
     const progress = subtasks.length > 0 ? `${completedCount}/${subtasks.length}` : null;
 
-    const formatDuration = (seconds: number) => {
+    const formatDuration = (rawSeconds: number) => {
+        const seconds = Math.max(0, Math.floor(rawSeconds));
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
@@ -68,6 +96,10 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
             ${item.isRunning && !item.isPaused ? 'ring-2 ring-green-400 bg-green-50 dark:bg-green-900/30 animate-pulse' : ''} \
             ${item.isPaused ? 'ring-2 ring-yellow-400 bg-yellow-50 dark:bg-yellow-900/30' : ''}`}
             data-task-item
+            style={{ transform: `translateX(${translateX}px)`, width: '100%' }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
             <div className="flex items-center p-4 cursor-pointer" onClick={handleMainClick}>
                 <div className={`mr-3 text-2xl ${item.isRunning && !item.isPaused ? 'animate-bounce' : ''} ${item.isPaused ? 'animate-pulse' : ''}`}>
@@ -99,7 +131,7 @@ export const ScheduleItem: React.FC<ScheduleItemProps> = ({ item, isActive, isCo
                             </>
                         )}
                     </div>
-                    {item.remainingDuration !== undefined && !item.isTimeless && (
+                    {item.remainingDuration !== undefined && !item.isTimeless && (item.isRunning || item.isPaused) && (
                         <>
                             <p className={`text-sm font-mono ${item.isRunning && !item.isPaused ? 'text-green-600 dark:text-green-400 font-bold' : ''} ${item.isPaused ? 'text-yellow-600 dark:text-yellow-400 font-bold' : 'text-gray-600 dark:text-gray-300'}`}>
                                 Time left: {formatDuration(item.remainingDuration)}
