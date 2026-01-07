@@ -166,7 +166,10 @@ export default function App() {
     useEffect(() => {
         const syncOnVisibility = () => {
             if (document.visibilityState === 'visible' && runningTimer && runningTimer._id) {
-                setTimers({ [runningTimer._id]: Math.floor(runningTimer.remainingDuration ?? 0) });
+                setTimers(prev => ({
+                    ...prev,
+                    [runningTimer._id]: Math.floor(runningTimer.remainingDuration ?? 0)
+                }));
             }
         };
         window.addEventListener('visibilitychange', syncOnVisibility);

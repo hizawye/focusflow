@@ -4,6 +4,34 @@ All notable changes to FocusFlow are documented here.
 
 ## [Unreleased]
 
+### 2026-01-07 - Timer Visibility Sync Fix
+**Type:** Bug Fix
+
+#### Fixed
+- **Timer Reset Bug on Tab Switch**
+  - Fixed issue where timers would reset to full duration when switching browser tabs
+  - Changed visibility sync to merge timer state instead of replacing entire timers object
+  - Timer now correctly preserves countdown progress across tab switches
+  - Location: `App.tsx:169` - Changed `setTimers({ ... })` to `setTimers(prev => ({ ...prev, ... }))`
+
+#### Technical Details
+- Previous behavior: `setTimers({ [runningTimer._id]: duration })` replaced entire state
+- New behavior: `setTimers(prev => ({ ...prev, [runningTimer._id]: duration }))` merges state
+- Fixes issue where non-running timer durations were lost on visibility change
+
+---
+
+### 2026-01-07 - Environment Configuration Fix
+**Type:** Bug Fix
+
+#### Fixed
+- **Clerk Authentication Error**
+  - Renamed `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to `VITE_CLERK_PUBLISHABLE_KEY`
+  - Fixed "Missing Clerk Publishable Key" error on app load
+  - Vite requires `VITE_` prefix for environment variables, not `NEXT_PUBLIC_`
+
+---
+
 ### 2026-01-07 - Documentation Initialization
 **Type:** Documentation
 

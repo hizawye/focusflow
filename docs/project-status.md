@@ -105,9 +105,19 @@
 ## Recent Work History
 
 ### January 2026
-**Focus:** Documentation and timer refinement
+**Focus:** Bug fixes and documentation
 
-- ✅ **Documentation Initialization** (current commit)
+- ✅ **Timer Visibility Sync Fix** (latest)
+  - Fixed bug where timers reset to full duration on tab switch
+  - Changed visibility sync to merge state instead of replacing
+  - Improved timer reliability across browser tabs
+
+- ✅ **Environment Configuration Fix**
+  - Fixed Clerk authentication error
+  - Renamed env variable from `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to `VITE_CLERK_PUBLISHABLE_KEY`
+  - Resolved "Missing Clerk Publishable Key" error
+
+- ✅ **Documentation Initialization**
   - Created comprehensive project documentation structure
   - Added `CLAUDE.md` with developer guidelines
   - Created `docs/` directory with 4 core documentation files
