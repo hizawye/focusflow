@@ -220,6 +220,88 @@ resumeTimer: (id) => Promise<void>
 - `completionStatus`: Map of task ID to boolean
 - `setCompletion(id, status)`: Update completion
 
+#### `useToast()` *(New in Sprint 1)*
+**Purpose:** Manage toast notifications for user feedback.
+
+**Returns:**
+- `toasts`: Array of active toast notifications
+- `showToast(message, type)`: Display a new toast (types: success, error, info, warning)
+- `dismissToast(id)`: Manually dismiss a toast
+- `clearAllToasts()`: Clear all toasts
+
+**Implementation:**
+- Local state management (no Convex)
+- Auto-dismisses toasts after 5 seconds (configurable via `TIMER_INTERVALS.TOAST_DISMISS`)
+- Supports stacking multiple toasts
+- Each toast has unique ID, message, type, and timestamp
+
+---
+
+## Utility Modules *(New in Sprint 1)*
+
+### Constants (`constants/`)
+
+#### `constants/intervals.ts`
+Centralized timing constants to eliminate magic numbers:
+```typescript
+TIMER_INTERVALS = {
+  NOW_UPDATE: 10_000,      // Update current time every 10s
+  TIMER_TICK: 1_000,       // Timer countdown every 1s
+  DURATION_BATCH: 30_000,  // Batch duration sync every 30s
+  TOAST_DISMISS: 5_000,    // Auto-dismiss toasts after 5s
+}
+
+BREAKPOINTS = {
+  MOBILE: 768,
+  TABLET: 1024,
+}
+
+LAYOUT = {
+  HEADER_HEIGHT: 80,
+  MOBILE_FOOTER_SPACER: 24,
+  TIMELINE_MARKER_OFFSET: 10,
+}
+```
+
+#### `constants/defaults.ts`
+Default values for task creation and configuration:
+```typescript
+DEFAULT_TASK = {
+  TITLE: 'New Task',
+  ICON: '📋',
+  COLOR: '#3b82f6',
+}
+
+DEFAULT_TIME_SLOT = {
+  START: '23:59',
+  END: '23:59',
+}
+
+DEFAULT_FLEXIBLE_TIME = {
+  EARLIEST_START: '06:00',
+  LATEST_END: '23:00',
+  DURATION: 60,
+}
+```
+
+### Time Utilities (`utils/timeUtils.ts`)
+Reusable time parsing and calculation functions:
+
+- **`parseTime(timeStr: string)`** - Parse HH:MM into {hours, minutes}
+- **`calculateDuration(start: string, end: string)`** - Duration in seconds
+- **`calculateRemainingTime(now: Date, start: string, end: string)`** - Remaining time for tasks
+- **`formatTime(seconds: number)`** - Format seconds as HH:MM:SS or MM:SS
+- **`minutesToSeconds(minutes: number)`** - Convert minutes to seconds
+- **`secondsToMinutes(seconds: number)`** - Convert seconds to minutes
+- **`isTaskActive(now: Date, start: string, end: string)`** - Check if task is currently active
+- **`createDateWithTime(timeStr: string)`** - Create Date object for today at specified time
+
+**Benefits:**
+- Eliminates code duplication (3+ instances of time parsing consolidated)
+- Consistent time calculations across the app
+- Well-documented with JSDoc comments and examples
+- Easier to test and maintain
+
 ---
 
 ## Backend Architecture (Convex)

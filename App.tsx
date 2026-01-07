@@ -7,6 +7,9 @@ import { todayLocalISO } from './src/utils/date.ts';
 import { useMutation } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { useUser } from '@clerk/clerk-react';
+import { TIMER_INTERVALS } from './constants/intervals.ts';
+import { parseTime, calculateRemainingTime } from './utils/timeUtils.ts';
+import { useToast } from './hooks/useToast.ts';
 
 import { Header } from './components/Header';
 import { PieChart } from 'lucide-react';
@@ -18,15 +21,19 @@ import { ScheduleList } from './components/ScheduleList';
 import { SettingsPage } from './components/SettingsPage';
 import { StatsPage } from './components/StatsPage';
 import { AuthGuard, UnauthenticatedState } from './components/AuthComponents';
+import { ToastContainer } from './components/ToastContainer';
 
 export default function App() {
     const { isLoaded, user } = useUser();
     const rightPaneRef = useRef<HTMLDivElement | null>(null);
     const scheduleEditorRef = useRef<any>(null);
 
+    // Toast notifications
+    const { toasts, showToast, dismissToast } = useToast();
+
     const [now, setNow] = useState(new Date());
     useEffect(() => {
-        const interval = setInterval(() => setNow(new Date()), 10000); // update every 10s
+        const interval = setInterval(() => setNow(new Date()), TIMER_INTERVALS.NOW_UPDATE);
         return () => clearInterval(interval);
     }, []);
 
@@ -66,8 +73,8 @@ export default function App() {
         return [...(schedule || [])].sort((a, b) => {
             const startA = a.start ?? '23:59';
             const startB = b.start ?? '23:59';
-            const [ah, am] = startA.split(":").map(Number);
-            const [bh, bm] = startB.split(":").map(Number);
+            const { hours: ah, minutes: am } = parseTime(startA);
+            const { hours: bh, minutes: bm } = parseTime(startB);
             return ah !== bh ? ah - bh : am - bm;
         });
     }, [schedule]);
@@ -132,7 +139,7 @@ export default function App() {
                 const idKey = runningTaskId! as string;
                 if (newTimers[idKey] > 0) {
                     newTimers[idKey] -= 1;
-                    
+
                     // Queue update locally; we'll batch-flush later
                     pendingDurationsRef.current[idKey] = newTimers[idKey];
                 } else {
@@ -144,7 +151,7 @@ export default function App() {
                 }
                 return newTimers;
             });
-        }, 1000);
+        }, TIMER_INTERVALS.TIMER_TICK);
 
         return () => clearInterval(interval);
     }, [runningTaskId, runningTimer, stopTimer]);
@@ -158,7 +165,7 @@ export default function App() {
                     .catch((err: unknown) => console.error('Batch duration update failed', err));
                 pendingDurationsRef.current = {};
             }
-        }, 30000);
+        }, TIMER_INTERVALS.DURATION_BATCH);
         return () => clearInterval(interval);
     }, []);
 
@@ -185,8 +192,8 @@ export default function App() {
                     newTimers[item._id as string] = item.remainingDuration;
                 } else if (item.start && item.end) {
                     // Calculate duration from start/end times when they exist
-                    const [startH, startM] = item.start.split(':').map(Number);
-                    const [endH, endM] = item.end.split(':').map(Number);
+                    const { hours: startH, minutes: startM } = parseTime(item.start);
+                    const { hours: endH, minutes: endM } = parseTime(item.end);
                     const durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
                     if (item._id) newTimers[item._id as string] = Math.max(0, durationMinutes) * 60; // Convert to seconds
                 }
@@ -221,24 +228,7 @@ export default function App() {
             if (runningTaskId && item._id === runningTaskId) return;
             if (!item.start || !item.end) return;
 
-            const [sH, sM] = item.start.split(":").map(Number);
-            const [eH, eM] = item.end.split(":").map(Number);
-            const startDate = new Date(now);
-            startDate.setHours(sH, sM, 0, 0);
-            const endDate = new Date(now);
-            endDate.setHours(eH, eM, 0, 0);
-
-            let remainingSec: number;
-            if (now < startDate) {
-                // Task hasn’t started yet – full duration remaining
-                remainingSec = Math.max(0, (endDate.getTime() - startDate.getTime()) / 1000);
-            } else if (now > endDate) {
-                // Task window has passed
-                remainingSec = 0;
-            } else {
-                // Currently in-progress (but timer not explicitly started)
-                remainingSec = Math.max(0, (endDate.getTime() - now.getTime()) / 1000);
-            }
+            const remainingSec = calculateRemainingTime(now, item.start, item.end);
 
             if (item._id) updated[item._id as string] = Math.floor(remainingSec);
         });
@@ -308,7 +298,7 @@ export default function App() {
             console.log('✅ Schedule exported successfully');
         } catch (error) {
             console.error('❌ Error exporting schedule:', error);
-            alert('Failed to export schedule. Please try again.');
+            showToast('Failed to export schedule. Please try again.', 'error');
         }
     };
 
@@ -328,7 +318,7 @@ export default function App() {
             e.target.value = '';
         } catch (error) {
             console.error('❌ Error importing schedule:', error);
-            alert('Failed to import schedule. Please check the file format and try again.');
+            showToast('Failed to import schedule. Please check the file format and try again.', 'error');
         }
     };
 
@@ -342,7 +332,7 @@ export default function App() {
             console.log('✅ Schedule cleared successfully');
         } catch (error) {
             console.error('❌ Error clearing schedule:', error);
-            alert('Failed to clear schedule. Please try again.');
+            showToast('Failed to clear schedule. Please try again.', 'error');
         }
     };
 
@@ -353,7 +343,7 @@ export default function App() {
                 await deleteItem(task._id);
                 setSelectedTaskIdx(null);
             } catch (e) {
-                alert('Failed to delete task.');
+                showToast('Failed to delete task.', 'error');
             }
         }
     };
@@ -362,7 +352,7 @@ export default function App() {
             try {
                 await updateItem(updated._id, updated);
             } catch (e) {
-                alert('Failed to update task.');
+                showToast('Failed to update task.', 'error');
             }
         }
     };
@@ -611,6 +601,9 @@ export default function App() {
                     </div>
                 </AuthGuard>
             )}
+
+            {/* Toast notifications */}
+            <ToastContainer toasts={toasts} onDismiss={dismissToast} />
         </div>
     );
 }

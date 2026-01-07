@@ -105,9 +105,19 @@
 ## Recent Work History
 
 ### January 2026
-**Focus:** Bug fixes and documentation
+**Focus:** Code refactoring and quality improvements
 
-- ✅ **Timer Visibility Sync Fix** (latest)
+- ✅ **Sprint 1 Refactoring: Foundation** (latest)
+  - Created `constants/` module (intervals, defaults) - eliminates magic numbers
+  - Created `utils/timeUtils.ts` - 8 reusable time functions, removes code duplication
+  - Created toast notification system (`useToast` hook + `ToastContainer` component)
+  - Replaced all `alert()` calls with toast notifications (better UX)
+  - App.tsx: replaced magic numbers with named constants
+  - App.tsx: consolidated duplicate time parsing logic
+  - Added 6 new files (462 total new lines of code)
+  - Improved code maintainability and DRY compliance
+
+- ✅ **Timer Visibility Sync Fix**
   - Fixed bug where timers reset to full duration on tab switch
   - Changed visibility sync to merge state instead of replacing
   - Improved timer reliability across browser tabs
@@ -156,13 +166,22 @@
 ## Development Metrics
 
 ### Codebase Stats
-- **Total Components:** 14 React components
-- **Total Hooks:** 4 custom hooks
+- **Total Components:** 15 React components (+1: ToastContainer)
+- **Total Hooks:** 5 custom hooks (+1: useToast)
+- **Utility Modules:** 2 new modules (constants/, utils/)
 - **Backend Functions:** 3 Convex files (schema + 2 CRUD modules)
-- **Lines of Code:** ~2,000+ (excluding node_modules)
-- **Main File:** `App.tsx` (613 lines)
+- **Lines of Code:** ~2,500+ (excluding node_modules) - increased by 462 lines
+- **Main File:** `App.tsx` (609 lines, reduced from 613)
 - **Largest Backend File:** `convex/scheduleItems.ts` (446 lines)
-- **Documentation:** 1,664 lines across 5 files (CLAUDE.md + docs/)
+- **Documentation:** 2,070+ lines across 5 files (CLAUDE.md + docs/)
+
+### New in Sprint 1 Refactoring
+- `constants/intervals.ts` (46 lines) - Timer intervals, breakpoints, layout constants
+- `constants/defaults.ts` (58 lines) - Default values for tasks and configurations
+- `utils/timeUtils.ts` (162 lines) - 8 reusable time calculation functions
+- `hooks/useToast.ts` (67 lines) - Toast notification management
+- `components/ToastContainer.tsx` (110 lines) - Toast UI component
+- `index.css` (19 lines) - Global CSS with animations
 
 ### Dependencies
 - **Production:** 9 packages (React, Convex, Clerk, Lucide, Recharts, DnD, etc.)
@@ -178,9 +197,50 @@
 
 ## Next Steps / Roadmap
 
+### Code Refactoring Progress (5-Sprint Plan)
+
+✅ **Sprint 1: Foundation** (COMPLETED - 2026-01-07)
+- ✅ Create constants files (intervals, defaults)
+- ✅ Create utils/timeUtils.ts with time parsing functions
+- ✅ Create hooks/useToast.ts and components/ToastContainer.tsx
+- ✅ Update App.tsx to use new utilities
+- ✅ Replace alert() with toast notifications
+
+🔄 **Sprint 2: Timer Refactoring** (Next - High Priority)
+- Create hooks/useTimerManager.ts with all timer logic
+- Create contexts/TimerContext.tsx for state sharing
+- Refactor App.tsx to use new timer hook/context
+- Test timer functionality (start/stop/pause/resume)
+- Verify visibility sync works correctly
+
+📋 **Sprint 3: State & Performance** (Medium Priority)
+- Remove redundant state in App.tsx
+- Optimize useEffect dependencies
+- Add memoization for expensive computations
+- Test performance improvements
+
+📋 **Sprint 4: Type Safety & Cleanup** (Medium Priority)
+- Improve type safety (remove type assertions)
+- Remove unused code and files
+- Delete deprecated hooks if confirmed unused
+- Clean up TypeScript errors
+
+📋 **Sprint 5: Component Refactoring** (Low Priority)
+- Split ScheduleList into smaller components
+- Extract reusable components from App.tsx
+- Add React.memo where beneficial
+- Add useCallback for handlers
+
+---
+
 ### Immediate (Next 1-2 Weeks)
 
-1. **Fix Gemini AI Integration** (High Priority)
+1. **Complete Sprint 2: Timer Refactoring** (High Priority)
+   - Extract timer logic from App.tsx
+   - Reduce App.tsx complexity further
+   - Improve timer reliability
+
+2. **Fix Gemini AI Integration** (High Priority)
    - Update to work with Convex mutations
    - Test schedule generation flow
    - Handle errors gracefully

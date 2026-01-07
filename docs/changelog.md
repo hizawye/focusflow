@@ -4,6 +4,69 @@ All notable changes to FocusFlow are documented here.
 
 ## [Unreleased]
 
+### 2026-01-07 - Sprint 1 Refactoring: Foundation
+**Type:** Refactoring
+
+#### Added
+- **Constants Module** (`constants/`)
+  - Created `constants/intervals.ts` - Centralized timer intervals, breakpoints, and layout constants
+  - Created `constants/defaults.ts` - Default values for tasks, time slots, and configurations
+  - Eliminates magic numbers throughout codebase (replaced `10000`, `30000`, `1000` with named constants)
+
+- **Time Utilities** (`utils/timeUtils.ts`)
+  - `parseTime()` - Parse HH:MM time strings (eliminates duplicate parsing code)
+  - `calculateDuration()` - Calculate duration between start/end times
+  - `calculateRemainingTime()` - Calculate remaining time for fixed tasks
+  - `formatTime()` - Format seconds into human-readable time
+  - Additional helpers: `minutesToSeconds()`, `secondsToMinutes()`, `isTaskActive()`, `createDateWithTime()`
+  - Removes code duplication (3+ instances of time parsing logic consolidated)
+
+- **Toast Notification System**
+  - Created `hooks/useToast.ts` - Custom hook for managing toast notifications
+  - Created `components/ToastContainer.tsx` - Toast UI component with animations
+  - Created `index.css` - Global CSS with slide-in animation for toasts
+  - Supports 4 types: success, error, info, warning
+  - Auto-dismisses after 5 seconds (configurable via TIMER_INTERVALS.TOAST_DISMISS)
+  - Better UX than browser alert() dialogs
+
+#### Changed
+- **App.tsx Improvements**
+  - Replaced all `alert()` calls with `showToast()` (5 instances)
+  - Replaced magic numbers with constants from `TIMER_INTERVALS`:
+    - `10000` → `TIMER_INTERVALS.NOW_UPDATE`
+    - `1000` → `TIMER_INTERVALS.TIMER_TICK`
+    - `30000` → `TIMER_INTERVALS.DURATION_BATCH`
+  - Replaced duplicate time parsing with `parseTime()` utility (3 locations)
+  - Replaced complex remaining time calculation with `calculateRemainingTime()` utility
+  - Line count reduced: 613 lines → 609 lines (cleaner, more maintainable code)
+
+#### Technical Details
+- **Code Quality Improvements**:
+  - DRY principle applied: eliminated duplicate time parsing logic
+  - Magic numbers removed: all intervals now use named constants
+  - Better error handling: toast notifications instead of blocking alerts
+  - TypeScript errors reduced (removed unused LAYOUT import)
+  - Improved code organization with dedicated utility modules
+
+- **Files Modified**:
+  - `App.tsx` - 55 lines changed (24 insertions, 31 deletions)
+
+- **Files Added**:
+  - `constants/intervals.ts` (46 lines)
+  - `constants/defaults.ts` (58 lines)
+  - `utils/timeUtils.ts` (162 lines)
+  - `hooks/useToast.ts` (67 lines)
+  - `components/ToastContainer.tsx` (110 lines)
+  - `index.css` (19 lines)
+
+#### Next Steps
+- Sprint 2: Timer refactoring (extract to dedicated hook/context)
+- Sprint 3: State & performance optimization
+- Sprint 4: Type safety improvements & cleanup
+- Sprint 5: Component refactoring
+
+---
+
 ### 2026-01-07 - Timer Visibility Sync Fix
 **Type:** Bug Fix
 
