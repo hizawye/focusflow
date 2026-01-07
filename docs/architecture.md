@@ -12,18 +12,25 @@ FocusFlow follows a modern real-time web application architecture with React fro
 │  │          React Application               │ │
 │  │  ┌─────────────┐  ┌──────────────────┐  │ │
 │  │  │   App.tsx   │  │   Components/    │  │ │
-│  │  │ (613 lines) │  │  - Header        │  │ │
+│  │  │ (~450 lines)│  │  - Header        │  │ │
 │  │  │             │  │  - ScheduleList  │  │ │
 │  │  │  State Mgmt │  │  - TaskDetails   │  │ │
-│  │  │  Timer Loop │  │  - StatsPage     │  │ │
+│  │  │             │  │  - StatsPage     │  │ │
 │  │  └─────────────┘  └──────────────────┘  │ │
 │  │         ▲                  ▲             │ │
 │  │         │                  │             │ │
 │  │  ┌──────┴──────────────────┴──────────┐ │ │
+│  │  │         Contexts                    │ │ │
+│  │  │  - TimerContext (timer state)       │ │ │
+│  │  └────────────────┬───────────────────┘ │ │
+│  │                   │                      │ │
+│  │  ┌────────────────┴───────────────────┐ │ │
 │  │  │         Custom Hooks               │ │ │
 │  │  │  - useScheduleFromConvex           │ │ │
 │  │  │  - useTimerFromConvex              │ │ │
+│  │  │  - useTimerManager (local timers)  │ │ │
 │  │  │  - useCompletionStatusFromConvex   │ │ │
+│  │  │  - useToast (notifications)        │ │ │
 │  │  └────────────────┬───────────────────┘ │ │
 │  └───────────────────┼─────────────────────┘ │
 │                      │                        │

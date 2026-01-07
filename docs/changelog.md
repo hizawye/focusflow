@@ -4,6 +4,53 @@ All notable changes to FocusFlow are documented here.
 
 ## [Unreleased]
 
+### 2026-01-07 - Sprint 2: Timer Refactoring + Codebase Cleanup
+**Type:** Refactoring, Cleanup
+
+#### Added
+- **Timer Context System** (`contexts/TimerContext.tsx`)
+  - Created React Context for timer state management
+  - Provides `useTimer()` hook for accessing timer state throughout component tree
+  - Centralizes all timer control functions (start, stop, pause, resume)
+  - Eliminates prop drilling for timer-related state
+
+- **Timer Manager Hook** (`hooks/useTimerManager.ts`)
+  - Extracted all timer logic from App.tsx (~150 lines)
+  - Manages local timer countdown (every 1 second)
+  - Handles batch duration updates (every 30 seconds)
+  - Implements visibility sync (prevents timer drift on tab switch)
+  - Initializes timer durations from Convex
+
+#### Deleted (Cleanup)
+- **Unused Files Removed** (7 files, ~700 lines):
+  - `App_enhanced.tsx` - Old/duplicate version of App.tsx
+  - `components/ConvexScheduleExample.tsx` - Unused example component
+  - `hooks/useSchedule.ts` - Deprecated local schedule hook
+  - `hooks/useMigrationHelper.ts` - Old migration utility
+  - `flexible-scheduling-examples.ts` - Example file
+  - `gemini-test.ts` - Test file not in active suite
+  - `test-timeless-tasks.ts` - Test file not in active suite
+
+#### Changed
+- **App.tsx Refactoring**
+  - Reduced from 609 lines to ~454 lines (~25% reduction)
+  - Removed all timer-related useEffect hooks (5 hooks extracted)
+  - Created `AppContent` component that consumes TimerContext
+  - Wrapped authenticated content with `TimerProvider`
+  - Removed duplicate `renderView` function
+
+- **DesktopNavBar.tsx**
+  - Removed unused `PieChart` import from lucide-react
+
+#### Technical Details
+- **Architecture Improvement**: Timer logic now follows React best practices with Context + Hook pattern
+- **State Management**: Single source of truth for timer state via TimerContext
+- **Performance**: Reduced prop drilling, cleaner component hierarchy
+- **Bundle Size**: Smaller due to removed unused files and imports
+- **TypeScript**: Fixed type issues in timer functions (Promise<null> to Promise<void>)
+
+---
+
 ### 2026-01-07 - Sprint 1 Refactoring: Foundation
 **Type:** Refactoring
 

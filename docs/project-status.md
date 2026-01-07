@@ -107,7 +107,19 @@
 ### January 2026
 **Focus:** Code refactoring and quality improvements
 
-- ✅ **Sprint 1 Refactoring: Foundation** (latest)
+- ✅ **Sprint 2: Timer Refactoring + Codebase Cleanup** (latest)
+  - Created `contexts/TimerContext.tsx` - React Context for timer state management
+  - Created `hooks/useTimerManager.ts` - Extracted timer logic from App.tsx (~150 lines)
+  - Refactored `App.tsx` from 609 to ~454 lines (~25% reduction)
+  - Created `AppContent` component that consumes TimerContext
+  - Deleted 7 unused files (~700 lines removed):
+    - `App_enhanced.tsx`, `ConvexScheduleExample.tsx`, `useSchedule.ts`
+    - `useMigrationHelper.ts`, `flexible-scheduling-examples.ts`
+    - `gemini-test.ts`, `test-timeless-tasks.ts`
+  - Removed unused `PieChart` import from DesktopNavBar.tsx
+  - Fixed TypeScript issues in timer functions
+
+- ✅ **Sprint 1 Refactoring: Foundation**
   - Created `constants/` module (intervals, defaults) - eliminates magic numbers
   - Created `utils/timeUtils.ts` - 8 reusable time functions, removes code duplication
   - Created toast notification system (`useToast` hook + `ToastContainer` component)
@@ -166,16 +178,30 @@
 ## Development Metrics
 
 ### Codebase Stats
-- **Total Components:** 15 React components (+1: ToastContainer)
-- **Total Hooks:** 5 custom hooks (+1: useToast)
-- **Utility Modules:** 2 new modules (constants/, utils/)
+- **Total Components:** 14 React components (reduced from 16, removed ConvexScheduleExample)
+- **Total Hooks:** 6 custom hooks (+2: useTimerManager, useToast; -2: useSchedule, useMigrationHelper)
+- **Contexts:** 1 (TimerContext - new)
+- **Utility Modules:** 2 modules (constants/, utils/)
 - **Backend Functions:** 3 Convex files (schema + 2 CRUD modules)
-- **Lines of Code:** ~2,500+ (excluding node_modules) - increased by 462 lines
-- **Main File:** `App.tsx` (609 lines, reduced from 613)
+- **Lines of Code:** ~2,200+ (excluding node_modules) - reduced by ~700 lines from cleanup
+- **Main File:** `App.tsx` (~454 lines, reduced from 609)
 - **Largest Backend File:** `convex/scheduleItems.ts` (446 lines)
-- **Documentation:** 2,070+ lines across 5 files (CLAUDE.md + docs/)
+- **Documentation:** 2,200+ lines across 5 files (CLAUDE.md + docs/)
 
-### New in Sprint 1 Refactoring
+### New in Sprint 2 Refactoring
+- `contexts/TimerContext.tsx` (115 lines) - Timer state context and provider
+- `hooks/useTimerManager.ts` (224 lines) - Timer management logic
+
+### Removed Files in Sprint 2 Cleanup
+- `App_enhanced.tsx` (183 lines) - Deleted
+- `components/ConvexScheduleExample.tsx` (108 lines) - Deleted
+- `hooks/useSchedule.ts` (72 lines) - Deleted
+- `hooks/useMigrationHelper.ts` (56 lines) - Deleted
+- `flexible-scheduling-examples.ts` (112 lines) - Deleted
+- `gemini-test.ts` (118 lines) - Deleted
+- `test-timeless-tasks.ts` (57 lines) - Deleted
+
+### From Sprint 1 Refactoring
 - `constants/intervals.ts` (46 lines) - Timer intervals, breakpoints, layout constants
 - `constants/defaults.ts` (58 lines) - Default values for tasks and configurations
 - `utils/timeUtils.ts` (162 lines) - 8 reusable time calculation functions
@@ -206,14 +232,15 @@
 - ✅ Update App.tsx to use new utilities
 - ✅ Replace alert() with toast notifications
 
-🔄 **Sprint 2: Timer Refactoring** (Next - High Priority)
-- Create hooks/useTimerManager.ts with all timer logic
-- Create contexts/TimerContext.tsx for state sharing
-- Refactor App.tsx to use new timer hook/context
-- Test timer functionality (start/stop/pause/resume)
-- Verify visibility sync works correctly
+✅ **Sprint 2: Timer Refactoring + Cleanup** (COMPLETED - 2026-01-07)
+- ✅ Create hooks/useTimerManager.ts with all timer logic
+- ✅ Create contexts/TimerContext.tsx for state sharing
+- ✅ Refactor App.tsx to use new timer hook/context
+- ✅ Test timer functionality (start/stop/pause/resume)
+- ✅ Delete 7 unused files (App_enhanced.tsx, test files, deprecated hooks)
+- ✅ Remove dead imports from components
 
-📋 **Sprint 3: State & Performance** (Medium Priority)
+🔄 **Sprint 3: State & Performance** (Next - Medium Priority)
 - Remove redundant state in App.tsx
 - Optimize useEffect dependencies
 - Add memoization for expensive computations
@@ -221,9 +248,8 @@
 
 📋 **Sprint 4: Type Safety & Cleanup** (Medium Priority)
 - Improve type safety (remove type assertions)
-- Remove unused code and files
-- Delete deprecated hooks if confirmed unused
-- Clean up TypeScript errors
+- Clean up remaining TypeScript errors
+- Add proper interfaces to components
 
 📋 **Sprint 5: Component Refactoring** (Low Priority)
 - Split ScheduleList into smaller components
@@ -235,10 +261,10 @@
 
 ### Immediate (Next 1-2 Weeks)
 
-1. **Complete Sprint 2: Timer Refactoring** (High Priority)
-   - Extract timer logic from App.tsx
-   - Reduce App.tsx complexity further
-   - Improve timer reliability
+1. **Complete Sprint 3: State & Performance** (Medium Priority)
+   - Optimize state management
+   - Add memoization for expensive computations
+   - Profile and improve performance
 
 2. **Fix Gemini AI Integration** (High Priority)
    - Update to work with Convex mutations

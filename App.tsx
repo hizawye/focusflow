@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View } from './types.ts';
 import { useScheduleFromConvex, useCompletionStatusFromConvex } from './hooks/useConvexSchedule.ts';
-import { useTimerFromConvex } from './hooks/useTimerFromConvex.ts';
 import { Id } from './convex/_generated/dataModel.ts';
 import { todayLocalISO } from './src/utils/date.ts';
-import { useMutation } from 'convex/react';
-import { api } from './convex/_generated/api';
 import { useUser } from '@clerk/clerk-react';
 import { TIMER_INTERVALS } from './constants/intervals.ts';
-import { parseTime, calculateRemainingTime } from './utils/timeUtils.ts';
+import { parseTime } from './utils/timeUtils.ts';
 import { useToast } from './hooks/useToast.ts';
+import { TimerProvider, useTimer } from './contexts/TimerContext';
 
 import { Header } from './components/Header';
 import { PieChart } from 'lucide-react';
@@ -22,6 +20,175 @@ import { SettingsPage } from './components/SettingsPage';
 import { StatsPage } from './components/StatsPage';
 import { AuthGuard, UnauthenticatedState } from './components/AuthComponents';
 import { ToastContainer } from './components/ToastContainer';
+
+/**
+ * AppContent Component
+ *
+ * Renders the authenticated app content and uses the TimerContext.
+ * Must be wrapped with TimerProvider to access timer state.
+ */
+function AppContent(props: any) {
+    const {
+        schedule,
+        sortedSchedule,
+        completionStatus,
+        selectedTaskIdx,
+        setSelectedTaskIdx,
+        selectedTask,
+        view,
+        setView,
+        isDarkMode,
+        isAlarmEnabled,
+        handleExportSchedule,
+        handleImportSchedule,
+        handleClearSchedule,
+        handleDeleteTask,
+        handleUpdateTask,
+        handleSidebarAdd,
+        handleGeminiAdd,
+        handleTaskSelection,
+        rightPaneRef,
+        NavItem,
+        totalTasks,
+        completedTasks,
+        notCompletedTasks,
+        totalMinutes
+    } = props;
+
+    // Get timer state and control functions from context
+    const { timers, runningTaskId, startTimer, stopTimer, pauseTimer, resumeTimer } = useTimer();
+
+    // Handle timer start/stop/pause/resume with vibration feedback
+    const handleStartTimer = (id: Id<"scheduleItems">) => {
+        console.log('🟢 Starting timer for schedule item:', id);
+        if (navigator?.vibrate) navigator.vibrate(10);
+        startTimer(id)
+            .then(() => console.log('✅ Timer started successfully'))
+            .catch(err => console.error('❌ Failed to start timer:', err));
+    };
+
+    const handleStopTimer = (id: Id<"scheduleItems">) => {
+        console.log('🔴 Stopping timer for id:', id);
+        stopTimer(id)
+            .then(() => console.log('✅ Timer stopped successfully'))
+            .catch(err => console.error('❌ Failed to stop timer:', err));
+    };
+
+    const handlePauseTimer = (id: Id<"scheduleItems">) => {
+        console.log('⏸️ Pausing timer for id:', id);
+        if (navigator?.vibrate) navigator.vibrate(10);
+        pauseTimer(id)
+            .then(() => console.log('✅ Timer paused successfully'))
+            .catch(err => console.error('❌ Failed to pause timer:', err));
+    };
+
+    const handleResumeTimer = (id: Id<"scheduleItems">) => {
+        console.log('▶️ Resuming timer for id:', id);
+        resumeTimer(id)
+            .then(() => console.log('✅ Timer resumed successfully'))
+            .catch(err => console.error('❌ Failed to resume timer:', err));
+    };
+
+    // Re-create renderView with timer handlers
+    const renderViewWithTimers = () => {
+        switch (view) {
+            case 'stats':
+                return <StatsPage schedule={schedule} completionStatus={completionStatus} />;
+            case 'settings':
+                return <SettingsPage
+                    isDarkMode={isDarkMode}
+                    onToggleDarkMode={() => {}}
+                    isAlarmEnabled={isAlarmEnabled}
+                    onToggleAlarm={() => {}}
+                    onImportSchedule={handleImportSchedule}
+                    onExportSchedule={handleExportSchedule}
+                    onClearSchedule={handleClearSchedule}
+                />;
+            case 'schedule':
+            default:
+                const now = new Date(); // Get current time for timeline marker
+                return (
+                    <div className="relative">
+                        <div className="flex relative w-full">
+                            {/* Timeline bar */}
+                            <div className="w-6 flex flex-col items-center relative">
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-full w-1 bg-primary-200 dark:bg-primary-800 rounded-full z-0" style={{height: '100%'}}></div>
+                                {/* You are here marker */}
+                                {schedule.length > 0 && (() => {
+                                    const first = schedule[0];
+                                    const last = schedule[schedule.length - 1];
+                                    const parse = (t?: string) => { if (!t) { const d = new Date(now); return d; } const [h, m] = t.split(':').map(Number); const d = new Date(now); d.setHours(h ?? 0, m ?? 0, 0, 0); return d; };
+                                    const start = parse(first.start).getTime();
+                                    const end = parse(last.end).getTime();
+                                    const pct = Math.min(1, Math.max(0, (now.getTime() - start) / (end - start)));
+                                    return (
+                                        <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{top: `calc(${pct * 100}% - 10px)`}}>
+                                            <div className="w-5 h-5 bg-primary-500 rounded-full border-4 border-white dark:border-gray-900 shadow-lg animate-pulse"></div>
+                                            <div className="text-xs text-primary-600 mt-1 text-center">You are here</div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                            {/* Schedule blocks */}
+                            <div className="flex-1 min-w-0">
+                                <ScheduleList
+                                    schedule={sortedSchedule}
+                                    completionStatus={completionStatus}
+                                    onSelectTask={handleTaskSelection}
+                                    selectedTaskIdx={selectedTaskIdx}
+                                    onStart={handleStartTimer}
+                                    onStop={handleStopTimer}
+                                    onPause={handlePauseTimer}
+                                    onResume={handleResumeTimer}
+                                    runningTaskId={runningTaskId}
+                                    timers={timers}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                );
+        }
+    };
+
+    return (
+        <>
+            {/* Mobile Task Details Modal */}
+            <TaskModal
+                selectedTask={selectedTask}
+                setSelectedTaskIdx={setSelectedTaskIdx}
+                selectedTaskIdx={selectedTaskIdx}
+            />
+            {/* Responsive layout: sidebar (desktop), header, main, right pane */}
+            <div className={`w-full max-w-[1800px] mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: 'calc(100vh - 80px)'}}>
+                <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
+                    {/* Sidebar navigation (desktop) */}
+                    <DesktopNavBar view={view} setView={setView} NavItem={NavItem} />
+                    {/* Main content: schedule, stats, or settings */}
+                    <main className="flex-1 w-full px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0 no-scrollbar">
+                        {renderViewWithTimers()}
+                    </main>
+                    {/* Right details pane (desktop only) */}
+                    <TaskDetailsSidebar
+                        totalMinutes={totalMinutes}
+                        totalTasks={totalTasks}
+                        completedTasks={completedTasks}
+                        notCompletedTasks={notCompletedTasks}
+                        selectedTask={selectedTask}
+                        setSelectedTaskIdx={setSelectedTaskIdx}
+                        selectedTaskIdx={selectedTaskIdx}
+                        handleSidebarAdd={handleSidebarAdd}
+                        handleGeminiAdd={handleGeminiAdd}
+                        handleDeleteTask={handleDeleteTask}
+                        handleUpdateTask={handleUpdateTask}
+                    />
+                </div>
+                {/* Bottom nav (mobile) */}
+                <MobileNavBar view={view} setView={setView} NavItem={NavItem} />
+                <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
+            </div>
+        </>
+    );
+}
 
 export default function App() {
     const { isLoaded, user } = useUser();
@@ -52,21 +219,6 @@ export default function App() {
         deleteItem 
     } = useScheduleFromConvex(today);
     const { completionStatus } = useCompletionStatusFromConvex(today);
-    
-    // Timer hook from Convex
-    const {
-        runningTimer,
-        startTimer,
-        stopTimer,
-        pauseTimer,
-        resumeTimer,
-        updateTimerDuration,
-        isLoading: isTimerLoading
-    } = useTimerFromConvex(today);
-
-    // Batch duration update infrastructure
-    const batchUpdateDurations = useMutation(api.scheduleItems.batchUpdateDurations);
-    const pendingDurationsRef = useRef<Record<string, number>>({});
 
     // --- Sort schedule by start time for display ---
     const sortedSchedule = useMemo(() => {
@@ -82,192 +234,6 @@ export default function App() {
     // --- Add selected task state ---
     const [selectedTaskIdx, setSelectedTaskIdx] = useState<number | null>(null);
     const selectedTask = selectedTaskIdx !== null ? sortedSchedule[selectedTaskIdx] : null;
-
-    // Timer state management
-    const [timers, setTimers] = useState<Record<string, number>>({});
-    // Track the currently running task title for UI updates
-    const [runningTaskTitle, setRunningTaskTitle] = useState<string | null>(null);
-    const [runningTaskId, setRunningTaskId] = useState<Id<"scheduleItems"> | null>(null);
-
-    // Update local running task state from Convex
-    useEffect(() => {
-        console.log("⚡ Timer loading state changed:", { isTimerLoading, runningTimer });
-        
-        if (!isTimerLoading) {
-            if (runningTimer) {
-                console.log("📱 Found running timer in Convex:", runningTimer);
-                
-                setRunningTaskTitle(prevTitle => {
-                    const newTitle = prevTitle !== runningTimer.title ? runningTimer.title : prevTitle;
-                    console.log("⚙️ Setting runningTaskTitle:", { prevTitle, newTitle });
-                    return newTitle;
-                });
-                
-                setRunningTaskId(prevId => {
-                    const newId = prevId !== runningTimer._id ? runningTimer._id : prevId;
-                    console.log("⚙️ Setting runningTaskId:", { prevId, newId });
-                    return newId;
-                });
-            } else {
-                console.log("🔄 No running timer found in Convex");
-                
-                setRunningTaskTitle(prevTitle => {
-                    const newTitle = prevTitle !== null ? null : prevTitle;
-                    console.log("⚙️ Clearing runningTaskTitle:", { prevTitle, newTitle });
-                    return newTitle;
-                });
-                
-                setRunningTaskId(prevId => {
-                    const newId = prevId !== null ? null : prevId;
-                    console.log("⚙️ Clearing runningTaskId:", { prevId, newId });
-                    return newId;
-                });
-            }
-        }
-    }, [runningTimer, isTimerLoading]);
-
-    // Timer effect - runs every second for active timers
-    useEffect(() => {
-        if (!runningTaskId) return;
-        
-        // Check if the timer is paused by using runningTimer from Convex
-        if (runningTimer?.isPaused) return;
-
-        const interval = setInterval(() => {
-            setTimers(prev => {
-                const newTimers = { ...prev };
-                const idKey = runningTaskId! as string;
-                if (newTimers[idKey] > 0) {
-                    newTimers[idKey] -= 1;
-
-                    // Queue update locally; we'll batch-flush later
-                    pendingDurationsRef.current[idKey] = newTimers[idKey];
-                } else {
-                    // Timer finished
-                    stopTimer(runningTaskId)
-                        .catch(err => console.error('Failed to stop timer:', err));
-                    // TODO: Show completion notification
-                    console.log('⏰ Timer finished for task id:', runningTaskId);
-                }
-                return newTimers;
-            });
-        }, TIMER_INTERVALS.TIMER_TICK);
-
-        return () => clearInterval(interval);
-    }, [runningTaskId, runningTimer, stopTimer]);
-
-    // Flush pending duration updates every 30 seconds
-    useEffect(() => {
-        const interval = setInterval(() => {
-            const payload = Object.entries(pendingDurationsRef.current).map(([id, remainingDuration]) => ({ id: id as unknown as Id<"scheduleItems">, remainingDuration }));
-            if (payload.length) {
-                batchUpdateDurations({ updates: payload })
-                    .catch((err: unknown) => console.error('Batch duration update failed', err));
-                pendingDurationsRef.current = {};
-            }
-        }, TIMER_INTERVALS.DURATION_BATCH);
-        return () => clearInterval(interval);
-    }, []);
-
-    // Synchronize timers when tab becomes visible to avoid drift
-    useEffect(() => {
-        const syncOnVisibility = () => {
-            if (document.visibilityState === 'visible' && runningTimer && runningTimer._id) {
-                setTimers(prev => ({
-                    ...prev,
-                    [runningTimer._id]: Math.floor(runningTimer.remainingDuration ?? 0)
-                }));
-            }
-        };
-        window.addEventListener('visibilitychange', syncOnVisibility);
-        return () => window.removeEventListener('visibilitychange', syncOnVisibility);
-    }, [runningTimer]);
-
-    // Initialize timer durations when schedule changes
-    useEffect(() => {
-        if (schedule) {
-            const newTimers: Record<string, number> = {};
-            schedule.forEach(item => {
-                if (item.remainingDuration !== undefined && item._id) {
-                    newTimers[item._id as string] = item.remainingDuration;
-                } else if (item.start && item.end) {
-                    // Calculate duration from start/end times when they exist
-                    const { hours: startH, minutes: startM } = parseTime(item.start);
-                    const { hours: endH, minutes: endM } = parseTime(item.end);
-                    const durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
-                    if (item._id) newTimers[item._id as string] = Math.max(0, durationMinutes) * 60; // Convert to seconds
-                }
-            });
-            
-            // Use a function form to avoid unnecessary re-renders if values are the same
-            setTimers(prev => {
-                // Only update if there are actual changes
-                const hasChanges = Object.keys(newTimers).some(key => 
-                    !prev[key] || prev[key] !== newTimers[key]
-                ) || Object.keys(prev).some(key => !newTimers[key]);
-                
-                return hasChanges ? newTimers : prev;
-            });
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [JSON.stringify(schedule?.map(item => ({
-        id: item._id,
-        remainingDuration: item.remainingDuration,
-        start: item.start,
-        end: item.end
-    })))]);
-
-    // Recalculate remaining time for fixed non-running tasks every 10s
-    useEffect(() => {
-        if (!schedule || schedule.length === 0) return;
-
-        const updated: Record<string, number> = {};
-        schedule.forEach(item => {
-            if (item.isTimeless || item.isFlexible) return;
-            // Skip currently running task – its timer is already live
-            if (runningTaskId && item._id === runningTaskId) return;
-            if (!item.start || !item.end) return;
-
-            const remainingSec = calculateRemainingTime(now, item.start, item.end);
-
-            if (item._id) updated[item._id as string] = Math.floor(remainingSec);
-        });
-
-        if (Object.keys(updated).length) {
-            setTimers(prev => ({ ...prev, ...updated }));
-        }
-    }, [now, schedule, runningTaskId]);
-
-    // Handle timer start/stop/pause/resume
-    const handleStartTimer = (id: Id<"scheduleItems">) => {
-        console.log('🟢 Starting timer for schedule item:', id);
-        if (navigator?.vibrate) navigator.vibrate(10);
-        startTimer(id)
-            .then(() => console.log('✅ Timer started successfully'))
-            .catch(err => console.error('❌ Failed to start timer:', err));
-    };
-
-    const handleStopTimer = (id: Id<"scheduleItems">) => {
-        console.log('🔴 Stopping timer for id:', id);
-        stopTimer(id)
-                .then(() => console.log('✅ Timer stopped successfully'))
-                .catch(err => console.error('❌ Failed to stop timer:', err));
-    };
-    
-    const handlePauseTimer = (id: Id<"scheduleItems">) => {
-        console.log('⏸️ Pausing timer for id:', id);
-        if (navigator?.vibrate) navigator.vibrate(10);
-        pauseTimer(id)
-                .then(() => console.log('✅ Timer paused successfully'))
-                .catch(err => console.error('❌ Failed to pause timer:', err));
-    };
-    
-    const handleResumeTimer = (id: Id<"scheduleItems">) => {
-        console.log('▶️ Resuming timer for id:', id);
-        resumeTimer(id)
-                .then(() => console.log('✅ Timer resumed successfully'))
-                .catch(err => console.error('❌ Failed to resume timer:', err));
-    };
 
     // Handle task selection - don't close panel if same task is clicked
     const handleTaskSelection = (idx: number) => {
@@ -370,66 +336,6 @@ export default function App() {
         return total + Math.max(0, end - start);
     }, 0) : 0;
 
-    const renderView = () => {
-        switch (view) {
-            case 'stats':
-                return <StatsPage schedule={schedule} completionStatus={completionStatus} />;
-            case 'settings':
-                return <SettingsPage 
-                    isDarkMode={isDarkMode} 
-                    onToggleDarkMode={setIsDarkMode}
-                    isAlarmEnabled={isAlarmEnabled}
-                    onToggleAlarm={setIsAlarmEnabled}
-                    onImportSchedule={handleImportSchedule}
-                    onExportSchedule={handleExportSchedule}
-                    onClearSchedule={handleClearSchedule}
-                />;
-            case 'schedule':
-            default:
-                return (
-                    <div className="relative">
-                        <div className="flex relative w-full">
-                            {/* Timeline bar */}
-                            <div className="w-6 flex flex-col items-center relative">
-                                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-full w-1 bg-primary-200 dark:bg-primary-800 rounded-full z-0" style={{height: '100%'}}></div>
-                                {/* You are here marker */}
-                                {schedule.length > 0 && (() => {
-                                    const first = schedule[0];
-                                    const last = schedule[schedule.length - 1];
-                                    const parse = (t?: string) => { if (!t) { const d = new Date(now); return d; } const [h, m] = t.split(':').map(Number); const d = new Date(now); d.setHours(h ?? 0, m ?? 0, 0, 0); return d; };
-                                    const start = parse(first.start).getTime();
-                                    const end = parse(last.end).getTime();
-                                    const pct = Math.min(1, Math.max(0, (now.getTime() - start) / (end - start)));
-                                    return (
-                                        <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{top: `calc(${pct * 100}% - 10px)`}}>
-                                            <div className="w-5 h-5 bg-primary-500 rounded-full border-4 border-white dark:border-gray-900 shadow-lg animate-pulse"></div>
-                                            <div className="text-xs text-primary-600 mt-1 text-center">You are here</div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                            {/* Schedule blocks */}
-                            <div className="flex-1 min-w-0">
-                                <ScheduleList 
-                                    ref={scheduleEditorRef}
-                                    schedule={sortedSchedule} 
-                                    completionStatus={completionStatus}
-                                    onSelectTask={handleTaskSelection}
-                                    selectedTaskIdx={selectedTaskIdx}
-                                    onStart={handleStartTimer}
-                                    onStop={handleStopTimer}
-                                    onPause={handlePauseTimer}
-                                    onResume={handleResumeTimer}
-                                    runningTaskId={runningTaskId}
-                                    timers={timers}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                );
-        }
-    };
-    
     // Calculate completion percentage for dynamic stats icon
     const totalBlocks = schedule.length;
     const completedCount = Object.values(completionStatus).filter(Boolean).length;
@@ -565,40 +471,34 @@ export default function App() {
                 <UnauthenticatedState />
             ) : (
                 <AuthGuard>
-                    {/* Mobile Task Details Modal */}
-                    <TaskModal
-                        selectedTask={selectedTask}
-                        setSelectedTaskIdx={setSelectedTaskIdx}
-                        selectedTaskIdx={selectedTaskIdx}
-                    />
-                    {/* Responsive layout: sidebar (desktop), header, main, right pane */}
-                    <div className={`w-full max-w-[1800px] mx-auto transition-filter duration-300 h-full flex flex-col`} style={{height: 'calc(100vh - 80px)'}}>
-                        <div className="flex flex-col md:flex-row min-h-0 flex-1" style={{height: '100%'}}>
-                            {/* Sidebar navigation (desktop) */}
-                            <DesktopNavBar view={view} setView={setView} NavItem={NavItem} />
-                    {/* Main content: schedule, stats, or settings */}
-                    <main className="flex-1 w-full px-0 md:px-8 py-6 md:py-10 max-w-full md:max-w-3xl mx-auto overflow-y-auto h-full min-h-0 no-scrollbar">
-                        {renderView()}
-                    </main>
-                    {/* Right details pane (desktop only) */}
-                    <TaskDetailsSidebar
-                        totalMinutes={totalMinutes}
-                        totalTasks={totalTasks}
-                        completedTasks={completedTasks}
-                        notCompletedTasks={notCompletedTasks}
-                        selectedTask={selectedTask}
-                        setSelectedTaskIdx={setSelectedTaskIdx}
-                        selectedTaskIdx={selectedTaskIdx}
-                        handleSidebarAdd={handleSidebarAdd}
-                        handleGeminiAdd={handleGeminiAdd}
-                        handleDeleteTask={handleDeleteTask}
-                        handleUpdateTask={handleUpdateTask}
-                    />
-                </div>
-                        {/* Bottom nav (mobile) */}
-                        <MobileNavBar view={view} setView={setView} NavItem={NavItem} />
-                        <div className="h-24 md:hidden"></div> {/* Spacer for fixed mobile footer */}
-                    </div>
+                    <TimerProvider schedule={schedule} date={today} now={now}>
+                        <AppContent
+                            schedule={schedule}
+                            sortedSchedule={sortedSchedule}
+                            completionStatus={completionStatus}
+                            selectedTaskIdx={selectedTaskIdx}
+                            setSelectedTaskIdx={setSelectedTaskIdx}
+                            selectedTask={selectedTask}
+                            view={view}
+                            setView={setView}
+                            isDarkMode={isDarkMode}
+                            isAlarmEnabled={isAlarmEnabled}
+                            handleExportSchedule={handleExportSchedule}
+                            handleImportSchedule={handleImportSchedule}
+                            handleClearSchedule={handleClearSchedule}
+                            handleDeleteTask={handleDeleteTask}
+                            handleUpdateTask={handleUpdateTask}
+                            handleSidebarAdd={handleSidebarAdd}
+                            handleGeminiAdd={handleGeminiAdd}
+                            handleTaskSelection={handleTaskSelection}
+                            rightPaneRef={rightPaneRef}
+                            NavItem={NavItem}
+                            totalTasks={totalTasks}
+                            completedTasks={completedTasks}
+                            notCompletedTasks={notCompletedTasks}
+                            totalMinutes={totalMinutes}
+                        />
+                    </TimerProvider>
                 </AuthGuard>
             )}
 

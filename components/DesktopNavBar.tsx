@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, PieChart, Settings } from 'lucide-react';
+import { Calendar, Settings } from 'lucide-react';
 
 // Sidebar navigation for desktop
 export function DesktopNavBar({ view, setView, NavItem }: any) {
